@@ -1,10 +1,4 @@
-"""update_schema_v2
 
-Revision ID: 008_update_schema_v2
-Revises: 007_create_ai_insights_and_chat_logs
-Create Date: 2026-08-27 12:00:00.000000
-
-"""
 from alembic import op
 import sqlalchemy as sa
 

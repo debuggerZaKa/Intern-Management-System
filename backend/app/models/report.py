@@ -7,7 +7,7 @@ from app.database import Base
 class WeeklyReport(Base):
     __tablename__ = "weekly_reports"
     __table_args__ = (
-        # Prevent duplicate reports for the same internship+week
+       
         UniqueConstraint("internship_id", "week_number", name="uq_report_internship_week"),
     )
 

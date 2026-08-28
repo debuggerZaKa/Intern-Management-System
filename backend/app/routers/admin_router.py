@@ -88,6 +88,32 @@ def deactivate_user(
     )
 
 
+@router.put("/users/{user_id}/activate", response_model=UserResponse)
+def activate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Activate a previously deactivated user account."""
+    user = admin_service.admin_activate_user(
+        db,
+        user_id,
+        actor=admin
+    )
+    perms = [p.name for p in user.role.permissions] if user.role else []
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        role_id=user.role_id,
+        status=user.status,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        role=user.role,
+        profile=user.profile,
+        permissions=perms
+    )
+
+
 @router.put("/users/{user_id}/archive", response_model=UserResponse)
 def archive_user(
     user_id: int,

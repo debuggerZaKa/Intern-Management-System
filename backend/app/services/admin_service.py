@@ -119,6 +119,37 @@ def admin_deactivate_user(db: Session, user_id: int, actor: User) -> User:
     return user
 
 
+def admin_activate_user(db: Session, user_id: int, actor: User) -> User:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    if user.status == "archived":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Archived users cannot be activated"
+        )
+    if user.status == "active" and user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already active"
+        )
+    if user.status != "deactivated":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only deactivated users can be activated"
+        )
+
+    user.status = "active"
+    user.is_active = True
+    log_action(db, "account_activated", actor_id=actor.id, target_user_id=user.id)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def admin_archive_user(db: Session, user_id: int, actor: User) -> User:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
