@@ -1,18 +1,15 @@
-import bcrypt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
+
+_ph = PasswordHasher()
+
+
+def get_password_hash(password: str) -> str:
+    return _ph.hash(password)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        password_bytes = plain_password.encode('utf-8')
-        hashed_bytes = hashed_password.encode('utf-8')
-        return bcrypt.checkpw(password_bytes, hashed_bytes)
-    except Exception:
+        return _ph.verify(hashed_password, plain_password)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
-
-def get_password_hash(password: str) -> str:
-    password_bytes = password.encode('utf-8')
-    # Truncate to 72 bytes if necessary per bcrypt spec
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')

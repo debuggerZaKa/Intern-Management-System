@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.auth.dependencies import get_db, get_current_user
 from app.auth.jwt_handler import create_access_token
 from app.models.user import User
-from app.schemas.auth import Token, RegisterRequest
+from app.schemas.auth import Token, RegisterRequest, LoginRequest
 from app.schemas.user import UserResponse
 from app.services.user_service import register_user, authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
@@ -30,27 +30,29 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         permissions=permissions
     )
 
+
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(req: LoginRequest, db: Session = Depends(get_db)):
     """
-    OAuth2 compatible token login. Accepts username (as email) and password.
-    Returns JWT access token containing only subject user ID.
+    Login endpoint accepting email and password JSON payload.
+    Returns JWT Bearer access token.
     """
-    user = authenticate_user(db, form_data.username, form_data.password)
+    user = authenticate_user(db, req.email, req.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not user.is_active or user.status == "deactivated":
+    if not user.is_active or user.status in ("deactivated", "archived", "rejected", "pending"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated or pending approval"
+            detail="User account is inactive or deactivated"
         )
-    
+
     access_token = create_access_token(subject=user.id)
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):

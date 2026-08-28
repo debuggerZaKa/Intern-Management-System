@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.database import Base
+
 
 class Profile(Base):
     __tablename__ = "profiles"
@@ -17,5 +19,6 @@ class Profile(Base):
     github_url = Column(String(255), nullable=True)
     bio = Column(Text, nullable=True)
     avatar_url = Column(String(255), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     user = relationship("User", back_populates="profile")

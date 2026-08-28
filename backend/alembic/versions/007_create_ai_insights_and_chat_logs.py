@@ -1,4 +1,10 @@
+"""create ai insights and chat logs tables
 
+Revision ID: 007_ai_insights
+Revises: 006_feedback_evals
+Create Date: 2026-08-26 19:46:00.000000
+
+"""
 from alembic import op
 import sqlalchemy as sa
 

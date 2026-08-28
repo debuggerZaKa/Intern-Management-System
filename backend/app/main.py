@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
     auth_router,
+    admin_router,
+    mentor_router,
+    intern_router,
+    signup_router,
     user_router,
     role_router,
     internship_router,
@@ -22,10 +26,12 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# CORS Middleware
+# Configurable CORS origins — avoids wildcard "*" in production
+origins = settings.cors_origins if settings.cors_origins else ["http://localhost:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +39,10 @@ app.add_middleware(
 
 # Mount Routers under API V1
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(signup_router, prefix=settings.API_V1_STR)
+app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(mentor_router, prefix=settings.API_V1_STR)
+app.include_router(intern_router, prefix=settings.API_V1_STR)
 app.include_router(user_router, prefix=settings.API_V1_STR)
 app.include_router(role_router, prefix=settings.API_V1_STR)
 app.include_router(internship_router, prefix=settings.API_V1_STR)
@@ -43,6 +53,7 @@ app.include_router(blocker_router, prefix=settings.API_V1_STR)
 app.include_router(feedback_router, prefix=settings.API_V1_STR)
 app.include_router(evaluation_router, prefix=settings.API_V1_STR)
 app.include_router(ai_router, prefix=settings.API_V1_STR)
+
 
 @app.get("/")
 def root():

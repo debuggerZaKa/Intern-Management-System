@@ -1,4 +1,10 @@
+"""create internships table
 
+Revision ID: 003_internships
+Revises: 002_users_profiles
+Create Date: 2026-08-26 19:42:00.000000
+
+"""
 from alembic import op
 import sqlalchemy as sa
 

@@ -1,4 +1,10 @@
+"""create weekly reports and blockers tables
 
+Revision ID: 005_reports_blockers
+Revises: 004_projects_tasks
+Create Date: 2026-08-26 19:44:00.000000
+
+"""
 from alembic import op
 import sqlalchemy as sa
 

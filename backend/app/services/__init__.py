@@ -8,6 +8,9 @@ from app.services.blocker_service import get_blockers, get_blocker_by_id, create
 from app.services.feedback_service import get_feedback_for_report, get_feedbacks_by_mentor, create_feedback, update_feedback
 from app.services.evaluation_service import get_evaluation, create_evaluation, update_evaluation
 from app.services.ai_service import summarize_weekly_report, handle_ai_chat, generate_final_summary
+from app.services.admin_service import admin_create_user, admin_deactivate_user, admin_archive_user, approve_signup, reject_signup, bulk_import_interns, get_system_analytics
+from app.services.assignment_service import assign_mentor, get_assignment_history, get_active_assignment
+from app.services.audit_service import log_action
 
 __all__ = [
     "get_all_roles",
@@ -56,4 +59,15 @@ __all__ = [
     "summarize_weekly_report",
     "handle_ai_chat",
     "generate_final_summary",
+    "admin_create_user",
+    "admin_deactivate_user",
+    "admin_archive_user",
+    "approve_signup",
+    "reject_signup",
+    "bulk_import_interns",
+    "get_system_analytics",
+    "assign_mentor",
+    "get_assignment_history",
+    "get_active_assignment",
+    "log_action",
 ]
