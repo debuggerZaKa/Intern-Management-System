@@ -1,8 +1,4 @@
-"""
-RBAC Seed Script
-Populates initial roles, permissions, and role_permission mappings.
-Safe to execute multiple times (idempotent).
-"""
+
 
 from app.database import SessionLocal
 from app.models.role import Role

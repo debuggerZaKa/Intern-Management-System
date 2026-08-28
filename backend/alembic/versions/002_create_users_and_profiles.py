@@ -1,10 +1,4 @@
-"""create users and profiles tables
 
-Revision ID: 002_users_profiles
-Revises: 001_roles_perms
-Create Date: 2026-08-26 19:41:00.000000
-
-"""
 from alembic import op
 import sqlalchemy as sa
 

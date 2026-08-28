@@ -1,10 +1,4 @@
-"""create mentor feedbacks and evaluations tables
 
-Revision ID: 006_feedback_evals
-Revises: 005_reports_blockers
-Create Date: 2026-08-26 19:45:00.000000
-
-"""
 from alembic import op
 import sqlalchemy as sa
 

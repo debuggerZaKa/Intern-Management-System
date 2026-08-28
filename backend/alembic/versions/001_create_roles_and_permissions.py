@@ -1,10 +1,4 @@
-"""create roles and permissions tables
 
-Revision ID: 001_roles_perms
-Revises: 
-Create Date: 2026-08-26 19:40:00.000000
-
-"""
 from alembic import op
 import sqlalchemy as sa
 

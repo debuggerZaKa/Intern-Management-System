@@ -1,10 +1,4 @@
-"""create projects and tasks tables
 
-Revision ID: 004_projects_tasks
-Revises: 003_internships
-Create Date: 2026-08-26 19:43:00.000000
-
-"""
 from alembic import op
 import sqlalchemy as sa
 

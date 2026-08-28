@@ -4,12 +4,12 @@ import sys
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Ensure backend root is on sys.path
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config import settings
 from app.database import Base
-import app.models  # load all models
+import app.models  
 
 config = context.config
 
