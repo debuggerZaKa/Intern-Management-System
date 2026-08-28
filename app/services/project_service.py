@@ -1,0 +1,73 @@
+from typing import List, Optional
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from app.models.project import Project
+from app.models.internship import Internship
+from app.models.user import User
+from app.schemas.project import ProjectCreate, ProjectUpdate
+
+def get_projects(db: Session, internship_id: Optional[int] = None) -> List[Project]:
+    query = db.query(Project)
+    if internship_id:
+        query = query.filter(Project.internship_id == internship_id)
+    return query.all()
+
+def get_project_by_id(db: Session, project_id: int) -> Optional[Project]:
+    return db.query(Project).filter(Project.id == project_id).first()
+
+def create_project(db: Session, req: ProjectCreate, current_user: User) -> Project:
+    internship_id = req.internship_id
+    if not internship_id:
+        active_internship = db.query(Internship).filter(
+            Internship.intern_id == current_user.id,
+            Internship.status == "active"
+        ).first()
+        if not active_internship:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active internship found for this user"
+            )
+        internship_id = active_internship.id
+    
+    project = Project(
+        internship_id=internship_id,
+        title=req.title,
+        description=req.description,
+        technologies=req.technologies,
+        repo_url=req.repo_url,
+        status=req.status
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return project
+
+def update_project(db: Session, project_id: int, req: ProjectUpdate, current_user: User) -> Project:
+    project = get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
+    # Ownership verification: if intern, must own the internship
+    if current_user.role.name == "intern" and project.internship.intern_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit another intern's project")
+    
+    update_data = req.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(project, field, value)
+    
+    db.commit()
+    db.refresh(project)
+    return project
+
+def delete_project(db: Session, project_id: int, current_user: User) -> bool:
+    project = get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
+    # Ownership verification
+    if current_user.role.name == "intern" and project.internship.intern_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another intern's project")
+    
+    db.delete(project)
+    db.commit()
+    return True
