@@ -5,10 +5,7 @@ from app.database import Base
 
 
 class MentorInternAssignment(Base):
-    """
-    Tracks the full assignment and reassignment history of mentors to interns.
-    Only one record per internship should have is_active=True at any time.
-    """
+    
     __tablename__ = "mentor_intern_assignments"
 
     id = Column(Integer, primary_key=True, index=True)

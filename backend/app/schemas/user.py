@@ -39,7 +39,7 @@ class UserResponse(BaseModel):
     role_id: int
     status: str
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     role: Optional[RoleResponse] = None
     profile: Optional[ProfileResponse] = None
     permissions: List[str] = []

@@ -11,9 +11,9 @@ class MentorFeedback(Base):
     report_id = Column(Integer, ForeignKey("weekly_reports.id", ondelete="CASCADE"), unique=True, nullable=False)
     mentor_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     feedback_text = Column(Text, nullable=False)
-    # 1-5 stars
+
     rating = Column(Integer, default=3, nullable=False)
-    # meeting_expectations, exceeding, needs_improvement, critical_attention
+
     category = Column(String(50), default="meeting_expectations", nullable=False)
     action_items = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -5,7 +5,7 @@ from datetime import datetime
 class BlockerBase(BaseModel):
     title: str
     description: str
-    severity: str = "moderate"  # minor, moderate, critical
+    severity: str = "moderate" 
     help_needed: Optional[str] = None
 
 class BlockerCreate(BlockerBase):

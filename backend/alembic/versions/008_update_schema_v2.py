@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '008_update_schema_v2'
-down_revision = '007_create_ai_insights_and_chat_logs'
+down_revision = '007_ai_insights'
 branch_labels = None
 depends_on = None
 

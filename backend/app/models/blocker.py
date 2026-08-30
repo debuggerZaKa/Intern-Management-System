@@ -12,9 +12,9 @@ class Blocker(Base):
     intern_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
-    # minor, moderate, critical
+
     severity = Column(String(50), default="moderate", nullable=False)
-    # unresolved, in_progress, resolved
+
     status = Column(String(50), default="unresolved", nullable=False)
     help_needed = Column(Text, nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

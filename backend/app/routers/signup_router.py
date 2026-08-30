@@ -25,10 +25,7 @@ class SelfSignupRequestSchema(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def request_signup(req: SelfSignupRequestSchema, db: Session = Depends(get_db)):
-    """
-    Public self-registration endpoint for interns.
-    Creates a pending account and signup request for admin review.
-    """
+    
     email = req.email.lower().strip()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(
@@ -43,7 +40,6 @@ def request_signup(req: SelfSignupRequestSchema, db: Session = Depends(get_db)):
             detail="Intern role is not configured."
         )
 
-    # Create pending user account
     user = User(
         email=email,
         hashed_password=get_password_hash(req.password),

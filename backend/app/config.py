@@ -18,18 +18,18 @@ class Settings(BaseSettings):
     DB_POOL_RECYCLE: int = 1800
     DB_POOL_TIMEOUT: int = 30
 
-    SECRET_KEY: str
+    SECRET_KEY: str = "netsol_ims_super_secret_jwt_key_change_in_production_2026"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:admin123@localhost:5432/IMS"
 
-    GROQ_API_KEY: str
+    GROQ_API_KEY: str = ""
     AI_MODEL: str = "llama-3.3-70b-versatile"
     AI_ENABLED: bool = True
 
     # Comma-separated list of allowed CORS origins
-    BACKEND_CORS_ORIGINS: str = "http://localhost:5173"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:5173"
 
     MAX_UPLOAD_SIZE_MB: int = 10
 

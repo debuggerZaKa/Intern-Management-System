@@ -15,7 +15,7 @@ class RoleBase(BaseModel):
 
 class RoleResponse(RoleBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     permissions: List[PermissionResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

@@ -17,9 +17,7 @@ def read_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.USER.READ))
 ):
-    """
-    Returns list of users. Requires 'user:read' permission.
-    """
+   
     users = get_users(db, role_id=role_id, status_filter=status_filter)
     result = []
     for u in users:
@@ -74,9 +72,7 @@ def change_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.ROLE.UPDATE))
 ):
-    """
-    Change user role. Requires 'role:update' permission.
-    """
+
     user = update_user_role(db, user_id, req.role_id)
     perms = [p.name for p in user.role.permissions] if user.role else []
     return UserResponse(
@@ -98,9 +94,7 @@ def change_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.USER.UPDATE))
 ):
-    """
-    Update user status (e.g. approve pending, deactivate). Requires 'user:update' permission.
-    """
+   
     user = update_user_status(db, user_id, req.status)
     perms = [p.name for p in user.role.permissions] if user.role else []
     return UserResponse(
