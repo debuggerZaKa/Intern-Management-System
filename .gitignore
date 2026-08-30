@@ -6,7 +6,6 @@
 !/frontend/
 !/.gitignore
 
-
 # Backend ignores
 backend/venv/
 backend/env/
@@ -28,9 +27,12 @@ backend/*.log
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+frontend/.env
+frontend/*.env
 frontend/*.local
 frontend/.env.local
 frontend/.env.*.local
+!frontend/.env.example
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
