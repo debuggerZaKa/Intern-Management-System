@@ -1,44 +1,48 @@
-# Ignore all files and folders in root
-/*
-
-# Whitelist tracked root directories and files
-!/backend/
-!/frontend/
-!/.gitignore
-
-# Backend ignores
+# =========================
+# Backend
+# =========================
 backend/venv/
 backend/env/
 backend/.venv/
 backend/.env
 backend/*.env
 !backend/.env.example
+
 backend/__pycache__/
 backend/*/__pycache__/
 backend/*/*/__pycache__/
 backend/.pytest_cache/
+
 backend/test_api.py
 backend/check_db.py
 backend/*.sqlite3
 backend/*.db
 backend/*.log
 
-# Frontend ignores
+
+# =========================
+# Frontend
+# =========================
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+
 frontend/.env
 frontend/*.env
 frontend/*.local
 frontend/.env.local
 frontend/.env.*.local
 !frontend/.env.example
+
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 
-# IDE & Editor files
+
+# =========================
+# IDE / OS
+# =========================
 .idea/
 .vscode/
 *.swp

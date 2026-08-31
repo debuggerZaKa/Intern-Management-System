@@ -48,7 +48,7 @@ export default function RegisterPage() {
     try {
       setError(null);
       setLoading(true);
-      await authService.register(formData);
+      await authService.requestSignup(formData);
       setSuccess(true);
       setTimeout(() => {
         navigate("/login");

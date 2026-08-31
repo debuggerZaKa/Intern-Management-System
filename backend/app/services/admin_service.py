@@ -214,23 +214,47 @@ def reject_signup(db: Session, request_id: int, actor: User, admin_notes: Option
 
 
 def get_system_analytics(db: Session) -> Dict[str, Any]:
+    from app.models.task import Task
+    from app.models.blocker import Blocker
+
     intern_role = db.query(Role).filter(Role.name == "intern").first()
     mentor_role = db.query(Role).filter(Role.name == "mentor").first()
+    admin_role = db.query(Role).filter(Role.name == "admin").first()
 
-    total_interns = db.query(User).filter(User.role_id == intern_role.id).count() if intern_role else 0
-    total_mentors = db.query(User).filter(User.role_id == mentor_role.id).count() if mentor_role else 0
+    interns_count = db.query(User).filter(User.role_id == intern_role.id).count() if intern_role else 0
+    mentors_count = db.query(User).filter(User.role_id == mentor_role.id).count() if mentor_role else 0
+    admins_count = db.query(User).filter(User.role_id == admin_role.id).count() if admin_role else 0
+
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+
     active_internships = db.query(Internship).filter(Internship.status == "active").count()
     completed_internships = db.query(Internship).filter(Internship.status == "completed").count()
+
+    total_tasks = db.query(Task).count()
     total_reports = db.query(WeeklyReport).count()
     pending_signups = db.query(SignupRequest).filter(SignupRequest.status == "pending").count()
+    unresolved_blockers = db.query(Blocker).filter(Blocker.status != "resolved").count()
 
     return {
-        "total_interns": total_interns,
-        "total_mentors": total_mentors,
+        # Top-level KPI cards (used by AnalyticsOverview.jsx)
+        "total_users": total_users,
+        "active_users": active_users,
         "active_internships": active_internships,
         "completed_internships": completed_internships,
-        "total_weekly_reports": total_reports,
         "pending_signup_requests": pending_signups,
+        "unresolved_blockers": unresolved_blockers,
+        # User distribution breakdown
+        "interns_count": interns_count,
+        "mentors_count": mentors_count,
+        "admins_count": admins_count,
+        # Activity metrics
+        "total_tasks": total_tasks,
+        "total_reports_submitted": total_reports,
+        # Legacy aliases kept for backward compatibility
+        "total_interns": interns_count,
+        "total_mentors": mentors_count,
+        "total_weekly_reports": total_reports,
     }
 
 

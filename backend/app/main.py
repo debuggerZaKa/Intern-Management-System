@@ -26,7 +26,7 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# Configurable CORS origins — avoids wildcard "*" in production
+# Configurable CORS origins — includes frontend origins
 origins = settings.cors_origins if settings.cors_origins else ["http://localhost:5173"]
 
 app.add_middleware(
@@ -60,5 +60,6 @@ def root():
     return {
         "message": "Welcome to AI-Powered Intern Progress Management System API",
         "docs": f"{settings.API_V1_STR}/docs",
-        "status": "online"
+        "status": "online",
+        "cors_origins": origins
     }

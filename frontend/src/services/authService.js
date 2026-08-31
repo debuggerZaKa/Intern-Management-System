@@ -12,10 +12,20 @@ export const authService = {
     });
   },
 
+  // Direct registration endpoint
   register: async (userData) => {
     return apiRequest("/auth/register", {
       method: "POST",
       body: userData,
+      requiresAuth: false,
+    });
+  },
+
+  // Self-signup request (pending admin approval)
+  requestSignup: async (signupData) => {
+    return apiRequest("/signup", {
+      method: "POST",
+      body: signupData,
       requiresAuth: false,
     });
   },

@@ -4,6 +4,10 @@ export const feedbackService = {
   getReportFeedback: async (reportId) => {
     return apiRequest(`/feedback/report/${reportId}`);
   },
+  getMentorFeedbacks: async (mentorId = null) => {
+    const query = mentorId ? `?mentor_id=${mentorId}` : "";
+    return apiRequest(`/feedback/mentor${query}`);
+  },
   submitFeedback: async (reportId, feedbackData) => {
     return apiRequest(`/feedback/report/${reportId}`, {
       method: "POST",

@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.models.role import Role
 from app.schemas.auth import RegisterRequest
+from app.models.signup_request import SignupRequest
 from app.schemas.user import ProfileUpdate, ChangeUserRoleRequest, UpdateUserStatusRequest
 from app.auth.hashing import get_password_hash, verify_password
 
@@ -63,6 +64,63 @@ def register_user(db: Session, req: RegisterRequest, default_role_name: str = "i
     db.add(profile)
     db.commit()
     db.refresh(user)
+    return user
+
+def create_signup_request(db: Session, req: RegisterRequest) -> User:
+    # 1. Check if email already exists
+    if get_user_by_email(db, req.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists"
+        )
+
+    # 2. Get intern role
+    role = db.query(Role).filter(Role.name == "intern").first()
+
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Intern role not initialized. Please run seeds."
+        )
+
+    # 3. Create user as PENDING
+    hashed_pwd = get_password_hash(req.password)
+
+    user = User(
+        email=req.email.lower(),
+        hashed_password=hashed_pwd,
+        role_id=role.id,
+        status="pending",
+        is_active=False
+    )
+
+    db.add(user)
+    db.flush()
+
+    # 4. Create profile
+    profile = Profile(
+        user_id=user.id,
+        full_name=req.full_name,
+        phone=req.phone,
+        university=req.university,
+        degree=req.degree,
+        semester=req.semester,
+        department=req.department
+    )
+
+    db.add(profile)
+
+    # 5. Create signup request
+    signup_request = SignupRequest(
+        user_id=user.id,
+        status="pending"
+    )
+
+    db.add(signup_request)
+
+    db.commit()
+    db.refresh(user)
+
     return user
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:

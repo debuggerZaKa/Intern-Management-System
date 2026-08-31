@@ -7,6 +7,7 @@ class InternshipBase(BaseModel):
     department: str
     start_date: date
     end_date: date
+    duration_weeks: int = 6
     current_week: int = 1
     status: str = "active"
 
@@ -16,12 +17,14 @@ class InternshipCreate(BaseModel):
     department: str
     start_date: date
     end_date: date
+    duration_weeks: int = 6  # Admin-selected duration; stored for historical accuracy
 
 class InternshipUpdate(BaseModel):
     mentor_id: Optional[int] = None
     department: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    duration_weeks: Optional[int] = None
     current_week: Optional[int] = None
     status: Optional[str] = None
 
@@ -29,6 +32,7 @@ class InternshipResponse(InternshipBase):
     id: int
     intern_id: int
     mentor_id: Optional[int] = None
+    duration_weeks: int = 6  # Exposed so frontend can use the actual stored value
     created_at: datetime
     intern: Optional[UserResponse] = None
     mentor: Optional[UserResponse] = None
