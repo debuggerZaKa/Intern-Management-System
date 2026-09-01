@@ -18,8 +18,6 @@ import {
   ChevronRight
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
-import logoImg from "../../assets/images/netsol_logo.png";
-import StatusBadge from "./StatusBadge";
 
 export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile }) {
   const { user, isAdmin, isMentor, isIntern, logout } = useAuth();
@@ -79,25 +77,6 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
                 </span>
               </div>
               <p className="text-[10px] font-medium text-slate-400">Engineering Portal</p>
-            </div>
-          </div>
-        </div>
-
-        {/* User Card Miniature */}
-        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 p-0.5 flex-shrink-0 shadow-sm">
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-bold text-xs text-blue-700 uppercase">
-                {user?.profile?.full_name?.slice(0, 2) || user?.email?.slice(0, 2) || "US"}
-              </div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-800 truncate">
-                {user?.profile?.full_name || user?.email}
-              </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <StatusBadge status={user?.role?.name || "intern"} size="xs" />
-              </div>
             </div>
           </div>
         </div>

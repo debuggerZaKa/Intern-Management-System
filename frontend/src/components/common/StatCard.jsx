@@ -13,34 +13,28 @@ export default function StatCard({
 }) {
   const colorMap = {
     blue: {
-      bg: "from-blue-500/10 to-indigo-500/10 border-blue-100",
-      iconBg: "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/25",
-      accent: "text-blue-600",
+      bg: "bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white shadow-lg shadow-blue-500/20 border border-blue-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-blue-500/30",
     },
     emerald: {
-      bg: "from-emerald-500/10 to-teal-500/10 border-emerald-100",
-      iconBg: "bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-emerald-500/25",
-      accent: "text-emerald-600",
+      bg: "bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 text-white shadow-lg shadow-emerald-500/20 border border-emerald-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-emerald-500/30",
     },
     amber: {
-      bg: "from-amber-500/10 to-orange-500/10 border-amber-100",
-      iconBg: "bg-gradient-to-tr from-amber-600 to-orange-600 text-white shadow-amber-500/25",
-      accent: "text-amber-600",
+      bg: "bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 text-white shadow-lg shadow-amber-500/20 border border-amber-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-amber-500/30",
     },
     purple: {
-      bg: "from-purple-500/10 to-pink-500/10 border-purple-100",
-      iconBg: "bg-gradient-to-tr from-purple-600 to-pink-600 text-white shadow-purple-500/25",
-      accent: "text-purple-600",
+      bg: "bg-gradient-to-br from-purple-600 via-purple-700 to-pink-600 text-white shadow-lg shadow-purple-500/20 border border-purple-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-purple-500/30",
     },
     rose: {
-      bg: "from-rose-500/10 to-red-500/10 border-rose-100",
-      iconBg: "bg-gradient-to-tr from-rose-600 to-red-600 text-white shadow-rose-500/25",
-      accent: "text-rose-600",
+      bg: "bg-gradient-to-br from-rose-600 via-rose-700 to-red-700 text-white shadow-lg shadow-rose-500/20 border border-rose-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-rose-500/30",
     },
     indigo: {
-      bg: "from-indigo-500/10 to-violet-500/10 border-indigo-100",
-      iconBg: "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-indigo-500/25",
-      accent: "text-indigo-600",
+      bg: "bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 text-white shadow-lg shadow-indigo-500/20 border border-indigo-500/30",
+      hover: "hover:scale-[1.01] hover:shadow-xl hover:shadow-indigo-500/30",
     },
   };
 
@@ -49,34 +43,28 @@ export default function StatCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between ${
-        onClick ? "cursor-pointer hover:border-blue-300" : ""
+      className={`rounded-2xl p-5 shadow-sm transition-all duration-200 flex flex-col justify-between ${scheme.bg} ${
+        onClick ? `cursor-pointer ${scheme.hover}` : ""
       }`}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-slate-500 tracking-wider uppercase">{title}</p>
-          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
+          <p className="text-xs font-extrabold text-white/80 tracking-wider uppercase">{title}</p>
+          <h3 className="text-2xl sm:text-3xl font-black text-white mt-1 tracking-tight">
             {value !== undefined && value !== null ? value : "—"}
           </h3>
         </div>
         {Icon && (
-          <div
-            className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-md flex-shrink-0 ${scheme.iconBg}`}
-          >
-            <Icon className="w-5 h-5" />
-          </div>
+          <Icon className="w-7 h-7 text-white/90 flex-shrink-0" />
         )}
       </div>
 
       {(subtitle || trend !== undefined) && (
-        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-          {subtitle && <span className="text-slate-500">{subtitle}</span>}
+        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs">
+          {subtitle && <span className="text-white/80 font-medium">{subtitle}</span>}
           {trend !== undefined && (
             <span
-              className={`inline-flex items-center gap-0.5 font-semibold ${
-                trend >= 0 ? "text-emerald-600" : "text-rose-600"
-              }`}
+              className="inline-flex items-center gap-0.5 font-semibold text-white bg-white/20 px-2 py-0.5 rounded-full backdrop-blur-sm"
             >
               {trend >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
               {trend > 0 ? `+${trend}%` : `${trend}%`} {trendLabel || ""}
@@ -87,3 +75,4 @@ export default function StatCard({
     </div>
   );
 }
+
