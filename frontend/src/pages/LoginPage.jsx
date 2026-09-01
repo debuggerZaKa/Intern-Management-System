@@ -145,9 +145,9 @@ export default function LoginPage() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Password
                 </label>
-                <a href="#forgot" onClick={(e) => { e.preventDefault(); alert("Please contact NETSOL IT Helpdesk to reset corporate credentials."); }} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 hover:text-blue-700">
                   Forgot?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.models.task import Task
 from app.models.project import Project
+from app.models.internship import Internship
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate
 
@@ -30,15 +31,31 @@ def get_task_by_id(db: Session, task_id: int) -> Optional[Task]:
 def create_task(db: Session, req: TaskCreate, current_user: User) -> Task:
     project = db.query(Project).filter(Project.id == req.project_id).first()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Selected project not found")
+    
+    # Task belongs to the project's assigned intern
+    intern_id = None
+    if project.internship and project.internship.intern_id:
+        intern_id = project.internship.intern_id
+    elif current_user.role.name == "intern":
+        intern_id = current_user.id
+    else:
+        # If no intern directly on project, check active internships
+        first_active = db.query(Internship).filter(Internship.status == "active").first()
+        intern_id = first_active.intern_id if first_active else current_user.id
     
     task = Task(
         project_id=req.project_id,
-        intern_id=current_user.id,
+        intern_id=intern_id,
+        created_by_id=current_user.id,
         title=req.title,
         description=req.description,
+        mentor_notes=req.mentor_notes,
+        submission_notes=req.submission_notes,
+        submission_url=req.submission_url,
+        attachment_url=req.attachment_url,
         priority=req.priority,
-        status=req.status,
+        status=req.status or "todo",
         week_number=req.week_number,
         due_date=req.due_date,
         estimated_hours=req.estimated_hours,
@@ -54,7 +71,7 @@ def update_task(db: Session, task_id: int, req: TaskUpdate, current_user: User) 
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
-    # Interns can only update their own tasks
+    # Interns can update status, submission notes/URLs, and actual_hours on their assigned tasks
     if current_user.role.name == "intern" and task.intern_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit another intern's task")
     
@@ -71,9 +88,9 @@ def delete_task(db: Session, task_id: int, current_user: User) -> bool:
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
-    # Ownership verification
-    if current_user.role.name == "intern" and task.intern_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another intern's task")
+    # Interns cannot delete tasks assigned by mentors
+    if current_user.role.name == "intern":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interns cannot delete mentor-assigned tasks")
     
     db.delete(task)
     db.commit()

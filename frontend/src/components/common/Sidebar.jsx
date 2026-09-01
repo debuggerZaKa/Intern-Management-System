@@ -3,12 +3,15 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
+  GraduationCap,
   Briefcase,
-  CheckSquare,
+  FolderGit2,
   FileText,
   AlertCircle,
   Award,
+  Settings,
   ShieldCheck,
+  UserCheck,
   User,
   LogOut,
   Sparkles,
@@ -24,14 +27,12 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
   const getNavItems = () => {
     if (isAdmin) {
       return [
-        { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { to: "/users", label: "Users & Approvals", icon: Users },
-        { to: "/internships", label: "Internships & Mentors", icon: Briefcase },
-        { to: "/tasks", label: "Tasks Master", icon: CheckSquare },
-        { to: "/reports", label: "Weekly Reports", icon: FileText },
-        { to: "/blockers", label: "Blockers Hub", icon: AlertCircle },
-        { to: "/evaluations", label: "Evaluations", icon: Award },
-        { to: "/audit-logs", label: "Audit Logs", icon: ShieldCheck },
+        { to: "/dashboard", label: "Executive Overview", icon: LayoutDashboard },
+        { to: "/interns", label: "Interns Directory", icon: GraduationCap },
+        { to: "/mentors", label: "Mentors Directory", icon: Users },
+        { to: "/users", label: "Users & Approvals", icon: UserCheck },
+        { to: "/settings", label: "System Settings", icon: Settings },
+        { to: "/audit-logs", label: "Audit Security Logs", icon: ShieldCheck },
         { to: "/profile", label: "My Profile", icon: User },
       ];
     }
@@ -39,7 +40,7 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
       return [
         { to: "/dashboard", label: "Mentor Portal", icon: LayoutDashboard },
         { to: "/internships", label: "Assigned Interns", icon: Users },
-        { to: "/tasks", label: "Intern Tasks", icon: CheckSquare },
+        { to: "/projects", label: "Intern Projects & Tasks", icon: FolderGit2 },
         { to: "/reports", label: "Review Reports", icon: FileText },
         { to: "/blockers", label: "Blockers Support", icon: AlertCircle },
         { to: "/evaluations", label: "Final Evaluations", icon: Award },
@@ -49,7 +50,7 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
     // Intern
     return [
       { to: "/dashboard", label: "Intern Dashboard", icon: LayoutDashboard },
-      { to: "/tasks", label: "My Task Board", icon: CheckSquare },
+      { to: "/projects", label: "My Projects & Tasks", icon: FolderGit2 },
       { to: "/reports", label: "Weekly Reports", icon: FileText },
       { to: "/blockers", label: "Report Blockers", icon: AlertCircle },
       { to: "/internships", label: "My Internship", icon: Briefcase },
@@ -61,10 +62,11 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
   const navItems = getNavItems();
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between flex-shrink-0 select-none h-full">
-      {/* Brand Header */}
-      <div>
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+    <aside className="w-64 bg-white flex flex-col justify-between flex-shrink-0 select-none h-full overflow-hidden">
+      {/* Top Header & Nav */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Brand Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 to-indigo-700 flex items-center justify-center text-white font-black text-lg shadow-sm shadow-blue-500/20">
               N
@@ -82,7 +84,7 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
         </div>
 
         {/* User Card Miniature */}
-        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 p-0.5 flex-shrink-0 shadow-sm">
               <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-bold text-xs text-blue-700 uppercase">
@@ -101,8 +103,10 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
         </div>
 
         {/* Navigation Links */}
-        <div className="px-3 py-4 space-y-1">
-          <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Navigation</p>
+        <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto min-h-0">
+          <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            {isAdmin ? "Admin Governance" : "Navigation"}
+          </p>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -130,8 +134,7 @@ export default function Sidebar({ onOpenAIChat, isMobile = false, onCloseMobile 
       </div>
 
       {/* Footer / AI Assistant Trigger & Logout */}
-      <div className="p-3 border-t border-slate-100 space-y-2">
-        {/* AI Assistant Quick Pill (Mentors & Admins & Interns) */}
+      <div className="p-3 border-t border-slate-100 space-y-2 flex-shrink-0 bg-white">
         {onOpenAIChat && (
           <button
             onClick={onOpenAIChat}

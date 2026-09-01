@@ -6,13 +6,15 @@ from app.models.permission import Permission
 from app.models.user import User
 from app.models.profile import Profile
 from app.models.internship import Internship
+from app.models.project import Project
+from app.models.task import Task
 from app.auth.hashing import get_password_hash
 
 # 1. System Roles
 ROLES_DATA = [
-    {"name": "admin", "description": "System Administrator with full access"},
-    {"name": "mentor", "description": "Mentor supervising interns and evaluating progress"},
-    {"name": "intern", "description": "Intern submitting weekly reports and managing assigned tasks"}
+    {"name": "admin", "description": "System Administrator managing accounts, internships, and security"},
+    {"name": "mentor", "description": "Mentor supervising interns, creating projects/tasks, and evaluating progress"},
+    {"name": "intern", "description": "Intern executing project tasks, submitting weekly reports, and logging deliverables"}
 ]
 
 # 2. Complete Permissions
@@ -31,7 +33,7 @@ PERMISSIONS_DATA = [
     {"name": "internship:delete", "description": "Terminate internships"},
     # Project permissions
     {"name": "project:read", "description": "View projects"},
-    {"name": "project:create", "description": "Create new projects"},
+    {"name": "project:create", "description": "Create and assign new projects"},
     {"name": "project:update", "description": "Update project details and repo links"},
     {"name": "project:delete", "description": "Delete projects"},
     # Task permissions
@@ -66,13 +68,25 @@ PERMISSIONS_DATA = [
 ]
 
 # 3. Role to Permissions Mapping
+# Admin is view-only (peek) for operational work items (Projects, Tasks, Reports, Evaluations), retaining administrative control over Users, Internships, Settings, and Audit.
 ROLE_PERMISSIONS_MAPPING = {
-    "admin": [p["name"] for p in PERMISSIONS_DATA],
+    "admin": [
+        "user:read", "user:update", "user:delete",
+        "role:read", "role:update",
+        "internship:read", "internship:create", "internship:update", "internship:delete",
+        "project:read",
+        "task:read",
+        "report:read",
+        "blocker:read",
+        "feedback:read",
+        "evaluation:read",
+        "ai:summarize", "ai:chat", "ai:admin_analytics"
+    ],
     "mentor": [
         "user:read",
         "internship:read", "internship:update",
-        "project:read",
-        "task:read",
+        "project:read", "project:create", "project:update", "project:delete",
+        "task:read", "task:create", "task:update", "task:delete",
         "report:read",
         "blocker:read", "blocker:update",
         "feedback:read", "feedback:create", "feedback:update",
@@ -81,8 +95,8 @@ ROLE_PERMISSIONS_MAPPING = {
     ],
     "intern": [
         "internship:read",
-        "project:read", "project:create", "project:update", "project:delete",
-        "task:read", "task:create", "task:update", "task:delete",
+        "project:read", "project:update",
+        "task:read", "task:update",
         "report:read", "report:create", "report:update",
         "blocker:read", "blocker:create", "blocker:update",
         "feedback:read",
@@ -104,6 +118,8 @@ def seed_rbac():
                 db.add(role)
                 db.flush()
                 print(f"  [+] Created Role: {role.name}")
+            else:
+                role.description = r_data["description"]
             role_objs[role.name] = role
 
         # 2. Seed Permissions
@@ -117,15 +133,12 @@ def seed_rbac():
                 print(f"  [+] Created Permission: {perm.name}")
             perm_objs[perm.name] = perm
 
-        # 3. Associate Permissions with Roles
-        for role_name, perm_names in ROLE_PERMISSIONS_MAPPING.items():
+        # 3. Synchronize Role Permissions
+        for role_name, allowed_p_names in ROLE_PERMISSIONS_MAPPING.items():
             role = role_objs[role_name]
-            current_perms = {p.name for p in role.permissions}
-            
-            for p_name in perm_names:
-                if p_name in perm_objs and p_name not in current_perms:
-                    role.permissions.append(perm_objs[p_name])
-                    print(f"  [+] Assigned '{p_name}' to Role '{role_name}'")
+            target_perms = [perm_objs[p] for p in allowed_p_names if p in perm_objs]
+            role.permissions = target_perms
+            print(f"  [+] Synchronized {len(target_perms)} permissions for Role '{role_name}'")
 
         # 4. Seed Default Admin Account
         admin_role = role_objs["admin"]
@@ -211,10 +224,71 @@ def seed_rbac():
                     status="active"
                 )
                 db.add(active_internship)
+                db.flush()
                 print(f"  [+] Created Active Internship: Ahmed Khan supervised by Dr. Sarah Tariq (Week 3)")
 
+            # 8. Seed Default Sample Projects
+            p1 = db.query(Project).filter(Project.internship_id == active_internship.id, Project.title == "NETSOL Financial Cloud Engine").first()
+            if not p1:
+                p1 = Project(
+                    internship_id=active_internship.id,
+                    title="NETSOL Financial Cloud Engine",
+                    description="Core leasing calculation engine, REST API microservices, and PostgreSQL database architecture.",
+                    technologies="FastAPI, PostgreSQL, Docker, Redis",
+                    repo_url="https://github.com/NETSOL/financial-cloud-engine",
+                    status="in_progress"
+                )
+                db.add(p1)
+                db.flush()
+                print("  [+] Created Sample Project: NETSOL Financial Cloud Engine")
+
+            p2 = db.query(Project).filter(Project.internship_id == active_internship.id, Project.title == "Enterprise AI Assistant Portal").first()
+            if not p2:
+                p2 = Project(
+                    internship_id=active_internship.id,
+                    title="Enterprise AI Assistant Portal",
+                    description="Llama 3.3 integration for automated report summarization, risk assessment, and cohort analytics.",
+                    technologies="React, Vite, Tailwind CSS, Python",
+                    repo_url="https://github.com/NETSOL/enterprise-ai-portal",
+                    status="not_started"
+                )
+                db.add(p2)
+                db.flush()
+                print("  [+] Created Sample Project: Enterprise AI Assistant Portal")
+
+            # Seed initial sample tasks attached to projects
+            t1 = db.query(Task).filter(Task.project_id == p1.id, Task.title == "Setup PostgreSQL database schemas and Alembic migrations").first()
+            if not t1:
+                t1 = Task(
+                    project_id=p1.id,
+                    intern_id=intern_user.id,
+                    title="Setup PostgreSQL database schemas and Alembic migrations",
+                    description="Define SQLAlchemy ORM models and run migration scripts.",
+                    priority="high",
+                    status="done",
+                    week_number=1,
+                    estimated_hours=6.0,
+                    actual_hours=5.5
+                )
+                db.add(t1)
+
+            t2 = db.query(Task).filter(Task.project_id == p1.id, Task.title == "Implement JWT authentication and RBAC middleware").first()
+            if not t2:
+                t2 = Task(
+                    project_id=p1.id,
+                    intern_id=intern_user.id,
+                    title="Implement JWT authentication and RBAC middleware",
+                    description="Configure password hashing, JWT bearer verification, and role dependencies.",
+                    priority="critical",
+                    status="in_progress",
+                    week_number=2,
+                    estimated_hours=8.0,
+                    actual_hours=4.0
+                )
+                db.add(t2)
+
         db.commit()
-        print("RBAC and Demo Accounts seeding successfully completed!")
+        print("RBAC, Projects, and Demo Accounts seeding successfully completed!")
     except Exception as e:
         db.rollback()
         print(f"Error seeding RBAC: {e}")

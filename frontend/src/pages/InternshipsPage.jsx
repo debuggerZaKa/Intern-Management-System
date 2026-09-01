@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Users, UserCheck } from "lucide-react";
 import { internshipService } from "../services/internshipService";
 import { adminService } from "../services/adminService";
 import { useAuth } from "../hooks/useAuth";
 import AppLayout from "../components/common/AppLayout";
 import InternshipList from "../components/admin/InternshipList";
+import AdminMentorsDirectory from "../components/admin/AdminMentorsDirectory";
+import AdminIntern360View from "../components/admin/AdminIntern360View";
 import Loader from "../components/common/Loader";
 import ErrorMessage from "../components/common/ErrorMessage";
 
@@ -13,6 +15,8 @@ export default function InternshipsPage() {
   const [internships, setInternships] = useState([]);
   const [mentors, setMentors] = useState([]);
   const [interns, setInterns] = useState([]);
+  const [activeTab, setActiveTab] = useState("pairings"); // 'pairings' | 'mentors'
+  const [inspectInternId, setInspectInternId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -42,28 +46,70 @@ export default function InternshipsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">Internship Tracks & Milestones</h2>
-          <p className="text-xs text-slate-500">
-            Monitor engineering tracks, weekly progression, and supervisor attachments
-          </p>
+      {inspectInternId ? (
+        <AdminIntern360View
+          internId={inspectInternId}
+          onBack={() => setInspectInternId(null)}
+        />
+      ) : (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              {isAdmin ? "Internship Pairings & Corporate Mentors" : "Assigned Internships & Tracks"}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {isAdmin
+                ? "Manage mentor-intern pairings, department tracks, program dates, and inspect mentor workloads"
+                : "Monitor engineering tracks, weekly progression, and supervisor attachments"}
+            </p>
+          </div>
+
+          {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
+
+          {/* Admin Tabs for Pairings vs Mentors Directory */}
+          {isAdmin && (
+            <div className="flex border-b border-slate-200 gap-2 bg-white px-4 rounded-2xl border border-slate-200/80 shadow-xs">
+              <button
+                onClick={() => setActiveTab("pairings")}
+                className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+                  activeTab === "pairings"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Internship Pairings ({internships.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("mentors")}
+                className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+                  activeTab === "mentors"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Corporate Mentors Directory ({mentors.length})</span>
+              </button>
+            </div>
+          )}
+
+          {loading ? (
+            <Loader message="Loading internship tracks..." />
+          ) : activeTab === "mentors" && isAdmin ? (
+            <AdminMentorsDirectory onSelectIntern={(internId) => setInspectInternId(internId)} />
+          ) : (
+            <InternshipList
+              internships={internships}
+              mentors={mentors}
+              interns={interns}
+              onRefresh={loadData}
+              isAdmin={isAdmin}
+            />
+          )}
         </div>
-
-        {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
-
-        {loading ? (
-          <Loader message="Loading internship tracks..." />
-        ) : (
-          <InternshipList
-            internships={internships}
-            mentors={mentors}
-            interns={interns}
-            onRefresh={loadData}
-            isAdmin={isAdmin}
-          />
-        )}
-      </div>
+      )}
     </AppLayout>
   );
 }

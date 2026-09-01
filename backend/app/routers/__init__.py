@@ -13,6 +13,7 @@ from app.routers.blocker_router import router as blocker_router
 from app.routers.feedback_router import router as feedback_router
 from app.routers.evaluation_router import router as evaluation_router
 from app.routers.ai_router import router as ai_router
+from app.routers.settings_router import router as settings_router
 
 __all__ = [
     "auth_router",
@@ -29,5 +30,6 @@ __all__ = [
     "blocker_router",
     "feedback_router",
     "evaluation_router",
-    "ai_router"
+    "ai_router",
+    "settings_router"
 ]

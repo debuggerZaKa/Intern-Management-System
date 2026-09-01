@@ -25,4 +25,12 @@ export const taskService = {
       method: "DELETE",
     });
   },
+  uploadFile: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest("/tasks/upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
 };

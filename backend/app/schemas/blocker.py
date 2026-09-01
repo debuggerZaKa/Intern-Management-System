@@ -5,7 +5,7 @@ from datetime import datetime
 class BlockerBase(BaseModel):
     title: str
     description: str
-    severity: str = "moderate" 
+    severity: str = "moderate"
     help_needed: Optional[str] = None
 
 class BlockerCreate(BlockerBase):
@@ -15,7 +15,7 @@ class BlockerUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     severity: Optional[str] = None
-    status: Optional[str] = None  # unresolved, in_progress, resolved
+    status: Optional[str] = None
     help_needed: Optional[str] = None
 
 class BlockerResponse(BlockerBase):
@@ -24,6 +24,6 @@ class BlockerResponse(BlockerBase):
     intern_id: int
     status: str
     resolved_at: Optional[datetime] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

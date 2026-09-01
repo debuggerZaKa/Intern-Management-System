@@ -4,7 +4,7 @@ from datetime import datetime
 
 class FeedbackBase(BaseModel):
     feedback_text: str
-    rating: int = 5  # 1-5
+    rating: int = 5
     category: str = "meeting_expectations"
     action_items: Optional[str] = None
 
@@ -21,7 +21,7 @@ class FeedbackResponse(FeedbackBase):
     id: int
     report_id: int
     mentor_id: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

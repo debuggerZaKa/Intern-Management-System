@@ -2,13 +2,18 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
 import DashboardPage from "../pages/DashboardPage";
 import UsersPage from "../pages/UsersPage";
+import InternsPage from "../pages/InternsPage";
+import MentorsPage from "../pages/MentorsPage";
 import InternshipsPage from "../pages/InternshipsPage";
-import TasksPage from "../pages/TasksPage";
+import ProjectsPage from "../pages/ProjectsPage";
 import ReportsPage from "../pages/ReportsPage";
 import BlockersPage from "../pages/BlockersPage";
 import EvaluationsPage from "../pages/EvaluationsPage";
+import SettingsPage from "../pages/SettingsPage";
 import AuditLogsPage from "../pages/AuditLogsPage";
 import ProfilePage from "../pages/ProfilePage";
 import NotFoundPage from "../pages/NotFoundPage";
@@ -21,6 +26,8 @@ export default function AppRoutes() {
       {/* Public Routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Root redirects to /dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -35,12 +42,36 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Admin Specific Routes */}
+      {/* Admin Directories */}
+      <Route
+        path="/interns"
+        element={
+          <RoleRoute allowedRoles={["admin"]}>
+            <InternsPage />
+          </RoleRoute>
+        }
+      />
+      <Route
+        path="/mentors"
+        element={
+          <RoleRoute allowedRoles={["admin"]}>
+            <MentorsPage />
+          </RoleRoute>
+        }
+      />
       <Route
         path="/users"
         element={
           <RoleRoute allowedRoles={["admin"]}>
             <UsersPage />
+          </RoleRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RoleRoute allowedRoles={["admin"]}>
+            <SettingsPage />
           </RoleRoute>
         }
       />
@@ -55,6 +86,14 @@ export default function AppRoutes() {
 
       {/* Shared Authenticated Routes */}
       <Route
+        path="/projects"
+        element={
+          <ProtectedRoute>
+            <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/internships"
         element={
           <ProtectedRoute>
@@ -62,13 +101,10 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Redirect /tasks to /projects */}
       <Route
         path="/tasks"
-        element={
-          <ProtectedRoute>
-            <TasksPage />
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/projects" replace />}
       />
       <Route
         path="/reports"
@@ -93,6 +129,10 @@ export default function AppRoutes() {
             <EvaluationsPage />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/analytics"
+        element={<Navigate to="/dashboard" replace />}
       />
       <Route
         path="/profile"

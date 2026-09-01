@@ -269,10 +269,7 @@ export default function ReportsPage() {
                   )}
 
                   <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-4">
-                      <span>Productivity Self-Rating: <strong className="text-slate-700">{report.self_rating_productivity}/10</strong></span>
-                      <span>Confidence Self-Rating: <strong className="text-slate-700">{report.self_rating_confidence}/10</strong></span>
-                    </div>
+                    <span className="font-semibold text-slate-500">Milestone: Week {report.week_number} of 6</span>
                     <span>Submitted: {new Date(report.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>

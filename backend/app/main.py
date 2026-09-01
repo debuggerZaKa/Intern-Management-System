@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.routers import (
     auth_router,
@@ -16,7 +18,8 @@ from app.routers import (
     blocker_router,
     feedback_router,
     evaluation_router,
-    ai_router
+    ai_router,
+    settings_router
 )
 
 app = FastAPI(
@@ -37,6 +40,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Uploads directory
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 # Mount Routers under API V1
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(signup_router, prefix=settings.API_V1_STR)
@@ -53,6 +61,7 @@ app.include_router(blocker_router, prefix=settings.API_V1_STR)
 app.include_router(feedback_router, prefix=settings.API_V1_STR)
 app.include_router(evaluation_router, prefix=settings.API_V1_STR)
 app.include_router(ai_router, prefix=settings.API_V1_STR)
+app.include_router(settings_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

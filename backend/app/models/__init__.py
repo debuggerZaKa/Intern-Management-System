@@ -15,6 +15,8 @@ from app.models.feedback import MentorFeedback
 from app.models.evaluation import EndOfInternshipEvaluation
 from app.models.ai_insight import AIInsight, AIChatLog
 from app.models.audit_log import AuditLog
+from app.models.system_setting import SystemSetting
+from app.models.password_reset import PasswordResetToken
 
 __all__ = [
     "Base",
@@ -35,4 +37,6 @@ __all__ = [
     "AIInsight",
     "AIChatLog",
     "AuditLog",
+    "SystemSetting",
+    "PasswordResetToken",
 ]

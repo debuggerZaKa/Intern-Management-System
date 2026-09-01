@@ -202,26 +202,26 @@ export default function InternshipList({
                     </div>
                   </div>
 
-                  {/* Mentor supervisor info */}
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs mb-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-medium">Supervising Mentor</p>
-                        <p className="font-bold text-slate-800 truncate max-w-[140px]">
-                          {internship.mentor?.profile?.full_name || internship.mentor?.email || "Unassigned"}
-                        </p>
+                  {/* Mentor supervisor info — only visible to Admin */}
+                  {isAdmin && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs mb-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium">Supervising Mentor</p>
+                          <p className="font-bold text-slate-800 truncate max-w-[140px]">
+                            {internship.mentor?.profile?.full_name || internship.mentor?.email || "Unassigned"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    {isAdmin && (
                       <button
                         onClick={() => setAssignModalInternship(internship)}
                         className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-white px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 shadow-xs"
                       >
                         {internship.mentor ? "Reassign" : "Assign"}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer Dates */}

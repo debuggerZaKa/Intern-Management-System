@@ -13,6 +13,10 @@ class Task(Base):
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
+    mentor_notes = Column(Text, nullable=True)
+    submission_notes = Column(Text, nullable=True)
+    submission_url = Column(String(500), nullable=True)
+    attachment_url = Column(String(500), nullable=True)
   
     priority = Column(String(50), default="medium", nullable=False)
  

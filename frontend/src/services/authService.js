@@ -36,4 +36,28 @@ export const authService = {
       requiresAuth: true,
     });
   },
+
+  forgotPassword: async (email) => {
+    return apiRequest("/auth/forgot-password", {
+      method: "POST",
+      body: { email: email.trim() },
+      requiresAuth: false,
+    });
+  },
+
+  resetPassword: async (token, newPassword) => {
+    return apiRequest("/auth/reset-password", {
+      method: "POST",
+      body: { token, new_password: newPassword },
+      requiresAuth: false,
+    });
+  },
+
+  changePassword: async (oldPassword, newPassword) => {
+    return apiRequest("/auth/change-password", {
+      method: "PUT",
+      body: { old_password: oldPassword, new_password: newPassword },
+      requiresAuth: true,
+    });
+  },
 };

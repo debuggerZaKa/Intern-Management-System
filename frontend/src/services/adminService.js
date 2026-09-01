@@ -105,4 +105,22 @@ export const adminService = {
   getAuditLogs: async (limit = 100) => {
     return apiRequest(`/admin/audit-logs?limit=${limit}`);
   },
+
+  // System Settings
+  getSettings: async () => {
+    return apiRequest("/admin/settings");
+  },
+
+  updateSettings: async (settingsData) => {
+    return apiRequest("/admin/settings", {
+      method: "PUT",
+      body: JSON.stringify(settingsData),
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+
+  // Cohort Analysis
+  getCohortAnalysis: async () => {
+    return apiRequest("/ai/cohort-analysis");
+  },
 };
