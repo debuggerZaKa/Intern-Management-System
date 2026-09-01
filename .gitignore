@@ -20,6 +20,15 @@ backend/*.db
 backend/*.log
 
 
+IMS_backend.zip
+inspect_new.py
+compare_repos.py
+generate_docx.py
+proposal.docx
+proposal.md
+data/
+
+
 # =========================
 # Frontend
 # =========================
