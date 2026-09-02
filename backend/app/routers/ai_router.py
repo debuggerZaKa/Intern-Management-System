@@ -38,7 +38,7 @@ def chat_endpoint(
     Natural language Q&A assistant for mentors and admins.
     Requires 'ai:chat' permission.
     """
-    return handle_ai_chat(db, req.query, current_user.id, req.intern_id)
+    return handle_ai_chat(db, req.query, current_user, req.intern_id, req.week_number)
 
 
 @router.post("/final-summary/{internship_id}", response_model=AIFinalSummaryResponse)

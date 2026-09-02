@@ -12,6 +12,8 @@ from app.models.internship import Internship
 from app.models.task import Task
 from app.models.blocker import Blocker
 from app.models.user import User
+from app.models.assignment import MentorInternAssignment
+from app.models.role import Role
 from app.models.ai_insight import AIInsight, AIChatLog
 from app.schemas.ai import AISummaryResponse, AIChatResponse, AIFinalSummaryResponse
 
@@ -32,6 +34,522 @@ def _get_groq_client():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="groq library is not installed."
         )
+
+
+# ---------------------------------------------------------------------------
+# RBAC Helper — determines which intern IDs the requesting user may access.
+# Authorization is enforced HERE in the backend, never delegated to the LLM.
+# ---------------------------------------------------------------------------
+
+def _get_allowed_intern_ids(db: Session, current_user: User) -> List[int]:
+    """
+    Returns the list of intern user IDs the current user is authorized to query.
+
+    - admin  : all active users whose role name is 'intern'
+    - mentor : interns from active MentorInternAssignment rows for this mentor
+    - intern : only their own user ID
+    - other  : raises HTTP 403
+    """
+    role_name = current_user.role.name if current_user.role else None
+
+    if role_name == "admin":
+        intern_users = (
+            db.query(User)
+            .join(Role, User.role_id == Role.id)
+            .filter(Role.name == "intern")
+            .all()
+        )
+        return [u.id for u in intern_users]
+
+    elif role_name == "mentor":
+        assignments = (
+            db.query(MentorInternAssignment)
+            .filter(
+                MentorInternAssignment.mentor_id == current_user.id,
+                MentorInternAssignment.is_active == True,
+            )
+            .all()
+        )
+        return [a.intern_id for a in assignments]
+
+    elif role_name == "intern":
+        return [current_user.id]
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your role does not have access to this resource.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Intent Detection — simple keyword check to identify broad/system-wide queries.
+# This is deterministic; the LLM never decides authorization scope.
+# ---------------------------------------------------------------------------
+
+_BROAD_QUESTION_KEYWORDS = [
+    "all intern",
+    "which intern",
+    "every intern",
+    "show intern",
+    "list intern",
+    "intern progress",
+    "overall progress",
+    "overall intern",
+    "intern overview",
+    "behind",
+    "struggling",
+    "critical blocker",
+    "unresolved blocker",
+    "cohort",
+    "overview",
+    "system wide",
+    "system-wide",
+    "who is stuck",
+    "who are stuck",
+    "who has blocker",
+    "intern performance",
+    "all blockers",
+]
+
+
+def _is_broad_system_question(query: str) -> bool:
+    """
+    Returns True when the query appears to request information about multiple
+    interns or the system as a whole — not about a single specific intern.
+    """
+    q = query.lower()
+    return any(kw in q for kw in _BROAD_QUESTION_KEYWORDS)
+
+
+# Keywords that indicate the user wants an explicit, exhaustive list of interns.
+# For these queries we bypass Groq enumeration and return the backend-assembled
+# list directly so no record is omitted.
+_LIST_ALL_KEYWORDS = [
+    "show me all intern",
+    "list all intern",
+    "show all intern",
+    "list intern",
+    "show intern",
+    "all intern",
+    "every intern",
+    "give me all intern",
+    "get all intern",
+    "display all intern",
+    "who are the intern",
+    "who are my intern",
+]
+
+
+def _is_list_all_request(query: str) -> bool:
+    """
+    Returns True when the user is explicitly requesting a complete,
+    exhaustive listing of interns (not a filtered or analytical question).
+    For these queries the backend returns the full list deterministically
+    without relying on Groq to enumerate records.
+    """
+    q = query.lower()
+    return any(kw in q for kw in _LIST_ALL_KEYWORDS)
+
+
+def _build_complete_intern_list(db: Session, allowed_intern_ids: List[int]) -> str:
+    """
+    Builds a numbered, deterministic plain-text listing of ALL authorized interns.
+    Every intern ID in allowed_intern_ids is guaranteed to appear exactly once.
+    This result is returned directly as the AI response — Groq is not asked to
+    enumerate records (which risks omission), only to reformat this text.
+    """
+    if not allowed_intern_ids:
+        return "No interns are currently available in your authorized scope."
+
+    interns = db.query(User).filter(User.id.in_(allowed_intern_ids)).all()
+    # Preserve the order of allowed_intern_ids for consistent output
+    intern_map: Dict[int, User] = {u.id: u for u in interns}
+
+    lines = [
+        f"COMPLETE INTERN LIST — {len(allowed_intern_ids)} intern(s) in authorized scope.",
+        "Every intern below is from the PostgreSQL database. Do NOT add, remove, or modify any entry.",
+        "",
+    ]
+
+    for idx, intern_id in enumerate(allowed_intern_ids, start=1):
+        user = intern_map.get(intern_id)
+        if not user:
+            continue
+        name = _get_intern_display_name(user)
+        internship = (
+            db.query(Internship)
+            .filter(Internship.intern_id == intern_id)
+            .order_by(Internship.created_at.desc())
+            .first()
+        )
+        dept = internship.department if internship else "N/A"
+        intern_status = internship.status if internship else "N/A"
+        open_blockers = (
+            db.query(Blocker)
+            .filter(Blocker.intern_id == intern_id, Blocker.status != "resolved")
+            .count()
+        )
+        tasks = db.query(Task).filter(Task.intern_id == intern_id).all()
+        done = sum(1 for t in tasks if t.status == "done")
+        lines.append(
+            f"{idx}. {name} | Email: {user.email} | Dept: {dept} | "
+            f"Internship: {intern_status} | Tasks: {done}/{len(tasks)} done | "
+            f"Open blockers: {open_blockers}"
+        )
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Context builders — query PostgreSQL and format results as a plain-text block
+# that is sent verbatim to Groq.  NO data is invented here.
+# ---------------------------------------------------------------------------
+
+def _get_intern_display_name(user: User) -> str:
+    """Returns profile full name if available, otherwise email."""
+    if user.profile and user.profile.full_name:
+        return user.profile.full_name
+    return user.email
+
+
+def _build_individual_context(db: Session, intern: User, week_number: Optional[int] = None) -> str:
+    """Builds a context string for a single authorized intern."""
+    name = _get_intern_display_name(intern)
+    internship = (
+        db.query(Internship)
+        .filter(Internship.intern_id == intern.id, Internship.status == "active")
+        .first()
+    )
+
+    tasks = db.query(Task).filter(Task.intern_id == intern.id).all()
+    completed_tasks = [t for t in tasks if t.status == "done"]
+
+    blocker_query = db.query(Blocker).filter(
+        Blocker.intern_id == intern.id,
+        Blocker.status != "resolved",
+    )
+    blockers = blocker_query.all()
+
+    report_query = db.query(WeeklyReport)
+    if internship:
+        report_query = report_query.filter(WeeklyReport.internship_id == internship.id)
+        if week_number:
+            report_query = report_query.filter(WeeklyReport.week_number == week_number)
+    reports = report_query.all() if internship else []
+
+    lines = [
+        f"Intern: {name}",
+        f"Email: {intern.email}",
+        f"Department: {internship.department if internship else 'N/A'}",
+        f"Internship Status: {internship.status if internship else 'No active internship'}",
+        f"Tasks — Completed: {len(completed_tasks)} / Total: {len(tasks)}",
+        f"Weekly Reports Submitted: {len(reports)}",
+        f"Unresolved Blockers: {len(blockers)}",
+    ]
+
+    # --- Full task details (Issue 2 fix) ---
+    # Include every task record so the AI can answer questions about individual
+    # tasks, their descriptions, statuses, priorities, and due dates.
+    if tasks:
+        lines.append(f"\nTask Details ({len(tasks)} task(s) total):")
+        for idx, t in enumerate(tasks, start=1):
+            due = str(t.due_date) if t.due_date else "No due date"
+            task_line = (
+                f"  Task {idx}: [{t.status.upper()}] {t.title}"
+                f" | Priority: {t.priority}"
+                f" | Due: {due}"
+                f" | Week: {t.week_number}"
+            )
+            lines.append(task_line)
+            if t.description:
+                lines.append(f"    Description: {t.description}")
+            if t.mentor_notes:
+                lines.append(f"    Mentor Notes: {t.mentor_notes}")
+            if t.submission_notes:
+                lines.append(f"    Submission Notes: {t.submission_notes}")
+            if t.submission_url:
+                lines.append(f"    Submission URL: {t.submission_url}")
+    else:
+        lines.append("\nNo tasks are currently assigned to this intern.")
+
+    if blockers:
+        lines.append("\nBlocker Details:")
+        for b in blockers:
+            lines.append(
+                f"  - [{b.severity.upper()}] {b.title}: {b.description}"
+                + (f" | Help needed: {b.help_needed}" if b.help_needed else "")
+            )
+
+    if reports:
+        latest = max(reports, key=lambda r: r.week_number)
+        lines.append(
+            f"\nLatest Report (Week {latest.week_number}): "
+            f"Productivity={latest.self_rating_productivity}/5, "
+            f"Confidence={latest.self_rating_confidence}/5"
+        )
+
+    return "\n".join(lines)
+
+
+def _build_broad_context(db: Session, allowed_intern_ids: List[int], query: str) -> str:
+    """
+    Builds a context string covering multiple authorized interns.
+    Data is restricted to allowed_intern_ids — no data leaks across role boundaries.
+    """
+    if not allowed_intern_ids:
+        return "No interns are currently assigned to you."
+
+    q = query.lower()
+
+    # Fetch intern user objects for name lookups
+    interns = db.query(User).filter(User.id.in_(allowed_intern_ids)).all()
+    intern_map: Dict[int, User] = {u.id: u for u in interns}
+
+    sections: List[str] = [f"Authorized intern scope: {len(allowed_intern_ids)} intern(s)\n"]
+
+    # --- Blocker-focused context ---
+    if any(kw in q for kw in ["blocker", "stuck", "blocked", "critical", "unresolved", "struggling"]):
+        severity_filter = "critical" if "critical" in q else None
+
+        blocker_query = db.query(Blocker).filter(
+            Blocker.intern_id.in_(allowed_intern_ids),
+            Blocker.status != "resolved",
+        )
+        if severity_filter:
+            blocker_query = blocker_query.filter(Blocker.severity == severity_filter)
+
+        blockers = blocker_query.order_by(Blocker.severity, Blocker.created_at).all()
+
+        if not blockers:
+            label = "critical unresolved" if severity_filter else "unresolved"
+            sections.append(f"No interns currently have {label} blockers.")
+        else:
+            sections.append(
+                f"{'Critical u' if severity_filter else 'U'}nresolved blockers ({len(blockers)} total):"
+            )
+            # Group by intern
+            by_intern: Dict[int, List[Blocker]] = {}
+            for b in blockers:
+                by_intern.setdefault(b.intern_id, []).append(b)
+
+            for intern_id, iblocks in by_intern.items():
+                user = intern_map.get(intern_id)
+                name = _get_intern_display_name(user) if user else f"Intern #{intern_id}"
+                internship = (
+                    db.query(Internship)
+                    .filter(Internship.intern_id == intern_id, Internship.status == "active")
+                    .first()
+                )
+                dept = internship.department if internship else "N/A"
+                sections.append(f"\n  Intern: {name} | Department: {dept}")
+                for b in iblocks:
+                    sections.append(
+                        f"    - [{b.severity.upper()}] {b.title}: {b.description}"
+                        + (f"\n      Help needed: {b.help_needed}" if b.help_needed else "")
+                    )
+
+    # --- Task/progress-focused context ---
+    elif any(kw in q for kw in ["task", "progress", "behind", "complet", "performance"]):
+        tasks = db.query(Task).filter(Task.intern_id.in_(allowed_intern_ids)).all()
+
+        # Group by intern
+        task_by_intern: Dict[int, List[Task]] = {}
+        for t in tasks:
+            task_by_intern.setdefault(t.intern_id, []).append(t)
+
+        if not task_by_intern:
+            sections.append("No task data found for authorized interns.")
+        else:
+            sections.append("Task progress per intern:")
+            for intern_id in allowed_intern_ids:
+                user = intern_map.get(intern_id)
+                name = _get_intern_display_name(user) if user else f"Intern #{intern_id}"
+                itasks = task_by_intern.get(intern_id, [])
+                done = sum(1 for t in itasks if t.status == "done")
+                total = len(itasks)
+                pct = round(done / total * 100) if total else 0
+                open_blockers = db.query(Blocker).filter(
+                    Blocker.intern_id == intern_id,
+                    Blocker.status != "resolved",
+                ).count()
+                sections.append(
+                    f"  {name}: {done}/{total} tasks done ({pct}%), "
+                    f"{open_blockers} unresolved blocker(s)"
+                )
+
+    # --- General overview context ---
+    else:
+        sections.append("Intern Overview:")
+        for intern_id in allowed_intern_ids:
+            user = intern_map.get(intern_id)
+            name = _get_intern_display_name(user) if user else f"Intern #{intern_id}"
+            internship = (
+                db.query(Internship)
+                .filter(Internship.intern_id == intern_id)
+                .order_by(Internship.created_at.desc())
+                .first()
+            )
+            tasks = db.query(Task).filter(Task.intern_id == intern_id).all()
+            done = sum(1 for t in tasks if t.status == "done")
+            open_blockers = db.query(Blocker).filter(
+                Blocker.intern_id == intern_id,
+                Blocker.status != "resolved",
+            ).count()
+            sections.append(
+                f"  {name} | Dept: {internship.department if internship else 'N/A'} | "
+                f"Status: {internship.status if internship else 'N/A'} | "
+                f"Tasks: {done}/{len(tasks)} done | "
+                f"Open blockers: {open_blockers}"
+            )
+
+    return "\n".join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Main chat handler
+# ---------------------------------------------------------------------------
+
+def handle_ai_chat(
+    db: Session,
+    query: str,
+    current_user: User,
+    intern_id: Optional[int] = None,
+    week_number: Optional[int] = None,
+) -> AIChatResponse:
+    """
+    Grounded AI chat with strict role-based access control.
+
+    Authorization is enforced by the backend before any data reaches Groq.
+    The LLM receives ONLY data the current user is permitted to see.
+    """
+    client = _get_groq_client()
+
+    role_name = current_user.role.name if current_user.role else None
+    allowed_intern_ids = _get_allowed_intern_ids(db, current_user)
+    context_data: Dict[str, Any] = {}
+    is_broad = _is_broad_system_question(query)
+
+    # ------------------------------------------------------------------
+    # CASE 1: Specific intern_id requested → validate authorization first
+    # ------------------------------------------------------------------
+    if intern_id is not None:
+        if intern_id not in allowed_intern_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to access this intern's information.",
+            )
+
+        # Verify the intern actually exists
+        target_intern = db.query(User).filter(User.id == intern_id).first()
+        if not target_intern:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="The requested intern was not found.",
+            )
+
+        context_str = (
+            "DATABASE CONTEXT (authorized data from PostgreSQL — use ONLY this):\n"
+            + _build_individual_context(db, target_intern, week_number)
+        )
+        context_data["intern_id"] = intern_id
+        context_data["context_type"] = "individual"
+
+    # ------------------------------------------------------------------
+    # CASE 2: No intern_id, but intern is asking a broad system question
+    # ------------------------------------------------------------------
+    elif role_name == "intern" and is_broad:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to access system-wide intern information.",
+        )
+
+    # ------------------------------------------------------------------
+    # CASE 3: No intern_id, intern asking about themselves
+    # ------------------------------------------------------------------
+    elif role_name == "intern":
+        target_intern = db.query(User).filter(User.id == current_user.id).first()
+        context_str = (
+            "DATABASE CONTEXT (authorized data from PostgreSQL — use ONLY this):\n"
+            + _build_individual_context(db, target_intern, week_number)
+        )
+        context_data["context_type"] = "individual_self"
+
+    # ------------------------------------------------------------------
+    # CASE 4: Admin or Mentor — explicit "list all interns" request.
+    # The backend assembles the complete numbered list and returns it
+    # directly. Groq is only asked to present it, NOT to enumerate
+    # records — this guarantees no intern is omitted from the response.
+    # ------------------------------------------------------------------
+    elif _is_list_all_request(query):
+        list_text = _build_complete_intern_list(db, allowed_intern_ids)
+        context_str = (
+            "DATABASE CONTEXT (authorized data from PostgreSQL — use ONLY this):\n"
+            + list_text
+        )
+        context_data["context_type"] = "list_all"
+        context_data["authorized_intern_count"] = len(allowed_intern_ids)
+
+    # ------------------------------------------------------------------
+    # CASE 5: Admin or Mentor — broad or analytical query over authorized scope
+    # ------------------------------------------------------------------
+    else:
+        context_str = (
+            "DATABASE CONTEXT (authorized data from PostgreSQL — use ONLY this):\n"
+            + _build_broad_context(db, allowed_intern_ids, query)
+        )
+        context_data["context_type"] = "broad"
+        context_data["authorized_intern_count"] = len(allowed_intern_ids)
+
+    # ------------------------------------------------------------------
+    # Call Groq — ONLY with backend-provided, authorized DB context
+    # ------------------------------------------------------------------
+    system_prompt = (
+        "You are an AI assistant for an Internship Management System. "
+        "You must answer ONLY using the database context provided by the backend in the user message. "
+        "Never invent or assume intern names, blocker titles, task counts, departments, dates, "
+        "progress metrics, reports, or any other database facts. "
+        "If the requested information is not present in the provided context, clearly state that "
+        "the information is not available in the system. "
+        "Never fabricate examples or placeholder data. "
+        "When the context contains a numbered list of interns, you MUST include EVERY entry in your "
+        "response without omitting any. Do not summarise, truncate, or select a subset. "
+        "Be concise and professional."
+    )
+
+    try:
+        completion = client.chat.completions.create(
+            model=settings.AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{context_str}\n\nUser Question: {query}"},
+            ],
+            temperature=0.1,
+        )
+        response_text = completion.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Groq Chat API failed for user {current_user.id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Groq AI Chat service failed: {str(e)}",
+        )
+
+    # Log chat history
+    chat_log = AIChatLog(
+        user_id=current_user.id,
+        query=query,
+        response=response_text,
+        context_type=context_data.get("context_type", "general"),
+    )
+    db.add(chat_log)
+    db.commit()
+
+    return AIChatResponse(
+        query=query,
+        response=response_text,
+        context=context_data,
+        created_at=datetime.now(timezone.utc),
+    )
 
 
 def summarize_weekly_report(db: Session, report_id: int, retry: bool = False) -> AISummaryResponse:
@@ -172,66 +690,6 @@ def summarize_weekly_report(db: Session, report_id: int, retry: bool = False) ->
     )
 
 
-def handle_ai_chat(db: Session, query: str, user_id: int, intern_id: Optional[int] = None) -> AIChatResponse:
-    client = _get_groq_client()
-
-    context_str = "System Context: User is querying the Internship Management System.\n"
-    context_data: Dict[str, Any] = {}
-
-    if intern_id:
-        intern = db.query(User).filter(User.id == intern_id).first()
-        if intern:
-            intern_name = intern.profile.full_name if intern.profile else intern.email
-            internship = db.query(Internship).filter(Internship.intern_id == intern.id, Internship.status == "active").first()
-            tasks = db.query(Task).filter(Task.intern_id == intern.id).all()
-            completed_tasks = [t for t in tasks if t.status == "done"]
-            reports = db.query(WeeklyReport).filter(WeeklyReport.internship_id == (internship.id if internship else -1)).all()
-            blockers = db.query(Blocker).filter(Blocker.intern_id == intern.id, Blocker.status != "resolved").all()
-
-            context_str += (
-                f"Target Intern: {intern_name}\n"
-                f"Department: {internship.department if internship else 'N/A'}\n"
-                f"Completed Tasks: {len(completed_tasks)}/{len(tasks)}\n"
-                f"Weekly Reports Submitted: {len(reports)}\n"
-                f"Unresolved Blockers: {len(blockers)} ({', '.join([b.title for b in blockers])})\n"
-            )
-            context_data["tasks_total"] = len(tasks)
-            context_data["tasks_completed"] = len(completed_tasks)
-            context_data["unresolved_blockers"] = len(blockers)
-
-    try:
-        completion = client.chat.completions.create(
-            model=settings.AI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an intelligent corporate AI assistant for an Internship Progress Management System. Provide concise, professional, and helpful answers."},
-                {"role": "user", "content": f"{context_str}\nUser Question: {query}"}
-            ],
-            temperature=0.5
-        )
-        response_text = completion.choices[0].message.content
-    except Exception as e:
-        logger.error(f"Groq Chat API failed for user {user_id}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Groq AI Chat service failed: {str(e)}"
-        )
-
-    # Log chat history
-    chat_log = AIChatLog(
-        user_id=user_id,
-        query=query,
-        response=response_text,
-        context_type="intern_qa" if intern_id else "general"
-    )
-    db.add(chat_log)
-    db.commit()
-
-    return AIChatResponse(
-        query=query,
-        response=response_text,
-        context=context_data,
-        created_at=datetime.now(timezone.utc)
-    )
 
 
 def generate_final_summary(db: Session, internship_id: int) -> AIFinalSummaryResponse:
