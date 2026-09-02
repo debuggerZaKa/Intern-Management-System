@@ -56,15 +56,6 @@ export default function EvaluationsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">6-Week Performance Evaluations</h2>
-          <p className="text-xs text-slate-500">
-            {isIntern
-              ? "View your final 6-week engineering evaluation and mentor recommendation"
-              : "Complete and review 6-week end-of-internship appraisals and hiring recommendations"}
-          </p>
-        </div>
-
         {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
         {loading ? (

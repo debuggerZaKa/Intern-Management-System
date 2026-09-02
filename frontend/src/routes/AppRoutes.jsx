@@ -7,6 +7,7 @@ import ResetPasswordPage from "../pages/ResetPasswordPage";
 import DashboardPage from "../pages/DashboardPage";
 import UsersPage from "../pages/UsersPage";
 import InternsPage from "../pages/InternsPage";
+import AlumniPage from "../pages/AlumniPage";
 import MentorsPage from "../pages/MentorsPage";
 import InternshipsPage from "../pages/InternshipsPage";
 import ProjectsPage from "../pages/ProjectsPage";
@@ -52,6 +53,14 @@ export default function AppRoutes() {
         }
       />
       <Route
+        path="/alumni"
+        element={
+          <RoleRoute allowedRoles={["admin", "mentor"]}>
+            <AlumniPage />
+          </RoleRoute>
+        }
+      />
+      <Route
         path="/mentors"
         element={
           <RoleRoute allowedRoles={["admin"]}>
@@ -67,14 +76,7 @@ export default function AppRoutes() {
           </RoleRoute>
         }
       />
-      <Route
-        path="/settings"
-        element={
-          <RoleRoute allowedRoles={["admin"]}>
-            <SettingsPage />
-          </RoleRoute>
-        }
-      />
+
       <Route
         path="/audit-logs"
         element={
@@ -135,12 +137,16 @@ export default function AppRoutes() {
         element={<Navigate to="/dashboard" replace />}
       />
       <Route
-        path="/profile"
+        path="/settings"
         element={
           <ProtectedRoute>
-            <ProfilePage />
+            <SettingsPage />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/profile"
+        element={<Navigate to="/settings" replace />}
       />
 
       {/* 404 Fallback */}

@@ -4,6 +4,7 @@ import { adminService } from "../../services/adminService";
 import ErrorMessage from "../common/ErrorMessage";
 
 export default function CreateUserModal({ isOpen, onClose, onUserCreated }) {
+  const [durationOptions, setDurationOptions] = useState([4, 6, 8, 12]);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -14,9 +15,23 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }) {
     university: "",
     degree: "",
     semester: "7th Semester",
+    duration_weeks: 6,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      adminService
+        .getSettings()
+        .then((data) => {
+          if (data && Array.isArray(data.duration_options) && data.duration_options.length > 0) {
+            setDurationOptions(data.duration_options);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -145,9 +160,9 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }) {
         </div>
 
         {formData.role_name === "intern" && (
-          <div className="pt-2 border-t border-slate-100 space-y-4">
+          <div className="pt-3 border-t border-slate-100 space-y-4">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Academic Details (For Interns)
+              Academic & Internship Track Configuration
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -184,6 +199,48 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }) {
                   placeholder="e.g. 7th Semester"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
                 />
+              </div>
+            </div>
+
+            {/* Internship Duration Field with quick selection pills */}
+            <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-blue-900">
+                  Internship Duration (Weeks) <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[11px] font-semibold text-blue-700">
+                  {formData.duration_weeks || 6} Weeks Track
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {durationOptions.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, duration_weeks: w })}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                      Number(formData.duration_weeks) === w
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {w} Weeks
+                  </button>
+                ))}
+
+                <div className="flex-1 min-w-[70px]">
+                  <input
+                    type="number"
+                    min="1"
+                    max="52"
+                    name="duration_weeks"
+                    value={formData.duration_weeks}
+                    onChange={(e) => setFormData({ ...formData, duration_weeks: Number(e.target.value) || 1 })}
+                    placeholder="Custom"
+                    className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
+                  />
+                </div>
               </div>
             </div>
           </div>

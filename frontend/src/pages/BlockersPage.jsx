@@ -73,37 +73,27 @@ export default function BlockersPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Blockers & Roadblocks Center</h2>
-            <p className="text-xs text-slate-500">
-              {isIntern
-                ? "Flag impediments, technical blockers, and request mentor guidance"
-                : "Review and resolve active blockers raised by engineering interns"}
-            </p>
-          </div>
+        {/* Controls Bar */}
+        <div className="flex items-center justify-end gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
+          >
+            <option value="all">All Blockers</option>
+            <option value="unresolved">Unresolved Only</option>
+            <option value="resolved">Resolved Only</option>
+          </select>
 
-          <div className="flex items-center gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
+          {isIntern && (
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-rose-500/20 transition-colors"
             >
-              <option value="all">All Blockers</option>
-              <option value="unresolved">Unresolved Only</option>
-              <option value="resolved">Resolved Only</option>
-            </select>
-
-            {isIntern && (
-              <button
-                onClick={() => setCreateModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-rose-500/20 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Raise Blocker</span>
-              </button>
-            )}
-          </div>
+              <Plus className="w-4 h-4" />
+              <span>Raise Blocker Ticket</span>
+            </button>
+          )}
         </div>
 
         {error && <ErrorMessage message={error} onClose={() => setError(null)} />}

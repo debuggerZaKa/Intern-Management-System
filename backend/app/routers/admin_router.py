@@ -49,6 +49,7 @@ def create_user_account(
     university: Optional[str] = None,
     degree: Optional[str] = None,
     semester: Optional[str] = None,
+    duration_weeks: Optional[int] = 6,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
@@ -62,7 +63,8 @@ def create_user_account(
     user = admin_service.admin_create_user(
         db, email=email, password=password, full_name=full_name,
         role_name=role_name, actor=admin, department=department,
-        phone=phone, university=university, degree=degree, semester=semester
+        phone=phone, university=university, degree=degree, semester=semester,
+        duration_weeks=duration_weeks
     )
     perms = [p.name for p in user.role.permissions] if user.role else []
     return UserResponse(

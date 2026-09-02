@@ -7,6 +7,7 @@ import AppLayout from "../components/common/AppLayout";
 import InternshipList from "../components/admin/InternshipList";
 import AdminMentorsDirectory from "../components/admin/AdminMentorsDirectory";
 import AdminIntern360View from "../components/admin/AdminIntern360View";
+import MentorAssignedInternsView from "../components/mentor/MentorAssignedInternsView";
 import Loader from "../components/common/Loader";
 import ErrorMessage from "../components/common/ErrorMessage";
 
@@ -41,29 +42,22 @@ export default function InternshipsPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!isMentor) {
+      loadData();
+    }
+  }, [isMentor]);
 
   return (
     <AppLayout>
-      {inspectInternId ? (
+      {isMentor ? (
+        <MentorAssignedInternsView />
+      ) : inspectInternId ? (
         <AdminIntern360View
           internId={inspectInternId}
           onBack={() => setInspectInternId(null)}
         />
       ) : (
         <div className="space-y-6">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
-              {isAdmin ? "Internship Pairings & Corporate Mentors" : "Assigned Internships & Tracks"}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {isAdmin
-                ? "Manage mentor-intern pairings, department tracks, program dates, and inspect mentor workloads"
-                : "Monitor engineering tracks, weekly progression, and supervisor attachments"}
-            </p>
-          </div>
-
           {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
           {/* Admin Tabs for Pairings vs Mentors Directory */}

@@ -15,7 +15,7 @@ DEFAULT_SETTINGS = {
         "Cybersecurity & Compliance",
         "UI/UX Product Design"
     ]),
-    "internship_duration_weeks": "6",
+    "duration_options": json.dumps([4, 6, 8, 12]),
     "ai_model": "llama-3.3-70b-versatile",
     "ai_enabled": "true",
     "email_notifications_enabled": "true",

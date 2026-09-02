@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { Users, FileCheck, AlertTriangle, Sparkles, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  Users,
+  FileCheck,
+  AlertTriangle,
+  Sparkles,
+  FolderGit2,
+  FileText,
+  AlertCircle,
+  Award,
+  ArrowRight,
+  GraduationCap
+} from "lucide-react";
 import { mentorService } from "../../services/mentorService";
 import StatCard from "../common/StatCard";
 import AttentionTracker from "./AttentionTracker";
-import InternCard from "./InternCard";
 import InternDetailView from "./InternDetailView";
 import Loader from "../common/Loader";
-import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 
 export default function MentorOverview() {
+  const navigate = useNavigate();
   const [internships, setInternships] = useState([]);
   const [attentionList, setAttentionList] = useState([]);
   const [selectedInternId, setSelectedInternId] = useState(null);
@@ -28,7 +39,7 @@ export default function MentorOverview() {
       setAttentionList(attentionData || []);
     } catch (err) {
       console.error("Failed to load mentor overview data:", err);
-      setError(err.message || "Failed to load assigned interns data.");
+      setError(err.message || "Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -51,11 +62,11 @@ export default function MentorOverview() {
   }
 
   if (loading) {
-    return <Loader message="Loading mentor portal & assigned interns..." />;
+    return <Loader message="Loading mentor portal dashboard..." />;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fadeIn">
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
       {/* KPI Stats */}
@@ -63,8 +74,8 @@ export default function MentorOverview() {
         <StatCard
           title="Assigned Interns"
           value={internships.length}
-          subtitle="Active mentees"
-          icon={Users}
+          subtitle="Active mentees supervised"
+          icon={GraduationCap}
           color="blue"
         />
         <StatCard
@@ -84,7 +95,7 @@ export default function MentorOverview() {
         <StatCard
           title="AI Mentorship"
           value="Enabled"
-          subtitle="Llama 3.3 Versatile active"
+          subtitle="Real-time assistant active"
           icon={Sparkles}
           color="indigo"
         />
@@ -96,37 +107,90 @@ export default function MentorOverview() {
         onSelectIntern={(internId) => setSelectedInternId(internId)}
       />
 
-      {/* Interns Grid Header */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      {/* Mentor Quick Workspace Shortcuts */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Your Assigned Interns</h3>
+            <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+              Mentor Operations Center
+            </h3>
             <p className="text-xs text-slate-500">
-              Select an intern to view their weekly reports, tasks board, reported blockers, and submit evaluations
+              Access your assigned mentees, evaluate deliverables, review weekly reports, and resolve roadblocks
             </p>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-            {internships.length} Active Mentees
-          </span>
+          <button
+            onClick={() => navigate("/internships")}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02] self-start sm:self-auto"
+          >
+            <Users className="w-4 h-4" />
+            <span>Go to Assigned Interns</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {internships.length === 0 ? (
-          <EmptyState
-            title="No interns currently assigned"
-            description="You do not have any active mentees assigned. An administrator will assign interns to you."
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {internships.map((internship) => (
-              <InternCard
-                key={internship.id}
-                internship={internship}
-                onClick={() => setSelectedInternId(internship.intern_id)}
-              />
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          <div
+            onClick={() => navigate("/internships")}
+            className="p-4 rounded-2xl bg-blue-50/50 hover:bg-blue-50 border border-blue-100 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
+              Assigned Interns
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-1">
+              View your {internships.length} active mentees roster, contact info, and track progress
+            </p>
           </div>
-        )}
+
+          <div
+            onClick={() => navigate("/reports")}
+            className="p-4 rounded-2xl bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform">
+              <FileText className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors">
+              Weekly Reports
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Review submitted weekly logs and provide structured mentor feedback
+            </p>
+          </div>
+
+          <div
+            onClick={() => navigate("/blockers")}
+            className="p-4 rounded-2xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-rose-600 transition-colors">
+              Blocker Support
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Address critical technical roadblocks and unblock mentees quickly
+            </p>
+          </div>
+
+          <div
+            onClick={() => navigate("/evaluations")}
+            className="p-4 rounded-2xl bg-purple-50/50 hover:bg-purple-50 border border-purple-100 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform">
+              <Award className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-600 transition-colors">
+              Evaluations & Grading
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Complete midterm and final performance evaluations for graduation
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+

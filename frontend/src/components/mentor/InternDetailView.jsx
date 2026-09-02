@@ -231,13 +231,16 @@ export default function InternDetailView({ internId, onBack }) {
   if (error) {
     return (
       <div className="space-y-4">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Assigned Interns
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            title="Back to Assigned Interns"
+            className="w-10 h-10 rounded-2xl bg-white border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-extrabold text-slate-800">Back to Assigned Interns</span>
+        </div>
         <ErrorMessage message={error} />
       </div>
     );
@@ -266,13 +269,16 @@ export default function InternDetailView({ internId, onBack }) {
     <div className="space-y-6">
       {/* Top Back & Header Card */}
       <div>
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Assigned Interns
-        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={onBack}
+            title="Back to Assigned Interns"
+            className="w-10 h-10 rounded-2xl bg-white border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-extrabold text-slate-800">Back to Assigned Interns</span>
+        </div>
 
         {/* Profile Card Header */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">

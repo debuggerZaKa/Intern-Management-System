@@ -1,29 +1,54 @@
 import React, { useState, useEffect } from "react";
-import { Users, UserPlus, Upload, UserCheck, Shield, GraduationCap, Eye, Search } from "lucide-react";
+import {
+  Users,
+  UserPlus,
+  Upload,
+  UserCheck,
+  Shield,
+  GraduationCap,
+  Eye,
+  Search,
+  Filter,
+  Clock,
+  RotateCcw,
+  X,
+  ChevronDown,
+  Mail,
+  Phone,
+  Building,
+  Calendar,
+  CheckCircle2
+} from "lucide-react";
 import { adminService } from "../services/adminService";
 import { roleService } from "../services/roleService";
 import { internshipService } from "../services/internshipService";
-import { projectService } from "../services/projectService";
 import AppLayout from "../components/common/AppLayout";
 import UserManagementTable from "../components/admin/UserManagementTable";
 import SignupRequestsTable from "../components/admin/SignupRequestsTable";
 import CreateUserModal from "../components/admin/CreateUserModal";
 import BulkImportModal from "../components/admin/BulkImportModal";
 import AdminIntern360View from "../components/admin/AdminIntern360View";
-import StatusBadge from "../components/common/StatusBadge";
 import Loader from "../components/common/Loader";
 import ErrorMessage from "../components/common/ErrorMessage";
-import EmptyState from "../components/common/EmptyState";
+import StatCard from "../components/common/StatCard";
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [internships, setInternships] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [signupRequests, setSignupRequests] = useState([]);
-  const [activeTab, setActiveTab] = useState("users"); // 'users' | 'interns_roster' | 'signups'
+  
+  // Tab State: 'users' (Current Users) | 'signups' (Pending Approvals)
+  const [activeTab, setActiveTab] = useState("users");
   const [selectedInternId, setSelectedInternId] = useState(null);
-  const [internSearch, setInternSearch] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Unified Filter States
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedDept, setSelectedDept] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
@@ -34,18 +59,14 @@ export default function UsersPage() {
     try {
       setLoading(true);
       setError(null);
-      const [usersData, rolesData, signupsData, internshipsData, projectsData] = await Promise.all([
+      const [usersData, rolesData, signupsData] = await Promise.all([
         adminService.getUsers(),
-        roleService.getRoles(),            
+        roleService.getRoles(),
         adminService.getSignupRequests("pending"),
-        internshipService.getInternships(),
-        projectService.getProjects(),
       ]);
       setUsers(usersData || []);
       setRoles(rolesData || []);
       setSignupRequests(signupsData || []);
-      setInternships(internshipsData || []);
-      setProjects(projectsData || []);
     } catch (err) {
       console.error("Failed to load users data:", err);
       setError(err.message || "Failed to load user management records.");
@@ -59,14 +80,75 @@ export default function UsersPage() {
   }, []);
 
   const internUsers = users.filter((u) => u.role?.name === "intern");
+  const mentorUsers = users.filter((u) => u.role?.name === "mentor");
 
-  const filteredInterns = internUsers.filter((i) => {
-    const name = i.profile?.full_name?.toLowerCase() || "";
-    const email = i.email?.toLowerCase() || "";
-    const uni = i.profile?.university?.toLowerCase() || "";
-    const term = internSearch.toLowerCase();
-    return name.includes(term) || email.includes(term) || uni.includes(term);
+  // Collect unique departments dynamically
+  const uniqueDepartments = Array.from(
+    new Set(users.map((u) => u.profile?.department).filter(Boolean))
+  ).sort();
+
+  // Tab-scoped filter evaluation
+  const filteredUsers = users.filter((u) => {
+    const term = search.toLowerCase().trim();
+    if (term) {
+      const name = u.profile?.full_name?.toLowerCase() || "";
+      const email = u.email?.toLowerCase() || "";
+      const dept = u.profile?.department?.toLowerCase() || "";
+      if (!name.includes(term) && !email.includes(term) && !dept.includes(term)) return false;
+    }
+
+    if (roleFilter !== "all" && u.role?.name !== roleFilter) return false;
+    if (statusFilter !== "all" && u.status !== statusFilter) return false;
+    if (selectedDept !== "all" && (u.profile?.department || "") !== selectedDept) return false;
+
+    if (fromDate) {
+      const created = u.created_at ? u.created_at.slice(0, 10) : null;
+      if (created && created < fromDate) return false;
+    }
+    if (toDate) {
+      const created = u.created_at ? u.created_at.slice(0, 10) : null;
+      if (created && created > toDate) return false;
+    }
+
+    return true;
   });
+
+  const filteredSignups = signupRequests.filter((r) => {
+    const term = search.toLowerCase().trim();
+    if (term) {
+      const name = r.full_name?.toLowerCase() || "";
+      const email = r.email?.toLowerCase() || "";
+      if (!name.includes(term) && !email.includes(term)) return false;
+    }
+
+    if (fromDate) {
+      const created = r.created_at ? r.created_at.slice(0, 10) : null;
+      if (created && created < fromDate) return false;
+    }
+    if (toDate) {
+      const created = r.created_at ? r.created_at.slice(0, 10) : null;
+      if (created && created > toDate) return false;
+    }
+
+    return true;
+  });
+
+  const hasActiveFilters =
+    search !== "" ||
+    roleFilter !== "all" ||
+    statusFilter !== "all" ||
+    selectedDept !== "all" ||
+    fromDate !== "" ||
+    toDate !== "";
+
+  const resetFilters = () => {
+    setSearch("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+    setSelectedDept("all");
+    setFromDate("");
+    setToDate("");
+  };
 
   return (
     <AppLayout>
@@ -77,162 +159,233 @@ export default function UsersPage() {
           onBack={() => setSelectedInternId(null)}
         />
       ) : (
-        <div className="space-y-6">
-          {/* Page Top Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">User Administration & Cohort Roster</h2>
-              <p className="text-xs text-slate-500">
-                Manage system accounts, user approvals, role permissions, and inspect intern management dossiers
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={() => setBulkImportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold shadow-xs transition-colors"
-              >
-                <Upload className="w-4 h-4 text-slate-500" />
-                <span>Bulk Import</span>
-              </button>
-
-              <button
-                onClick={() => setCreateUserOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Add User</span>
-              </button>
-            </div>
+        <div className="space-y-6 animate-fadeIn">
+          
+          {/* Top Metric Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Total System Staff"
+              value={users.length}
+              subtitle="All system accounts"
+              icon={Users}
+              color="blue"
+            />
+            <StatCard
+              title="Corporate Mentors"
+              value={mentorUsers.length}
+              subtitle="Supervising mentors"
+              icon={Shield}
+              color="indigo"
+            />
+            <StatCard
+              title="Enrolled Interns"
+              value={internUsers.length}
+              subtitle="Active cohort interns"
+              icon={GraduationCap}
+              color="emerald"
+            />
+            <StatCard
+              title="Pending Approvals"
+              value={signupRequests.length}
+              subtitle="Awaiting self-signup approval"
+              icon={Clock}
+              color="amber"
+            />
           </div>
 
           {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-          {/* Tab Navigation */}
-          <div className="flex overflow-x-auto border-b border-slate-200 gap-2 bg-white px-4 rounded-2xl border border-slate-200/80 shadow-xs">
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`py-3.5 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
-                activeTab === "users"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>All Users Directory ({users.length})</span>
-            </button>
+          {/* ========================================================= */}
+          {/* UNIFIED FILTER & ACTION TOOLBAR CONTAINER CARD            */}
+          {/* ========================================================= */}
+          <div className="bg-white p-5 rounded-3xl border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+              
+              {/* Left: Tab Switcher (Current Users vs Pending Approvals) */}
+              <div className="h-11 bg-slate-100/80 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/60 shadow-inner flex-shrink-0">
+                <button
+                  onClick={() => setActiveTab("users")}
+                  className={`h-full px-5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === "users"
+                      ? "bg-slate-900 text-white shadow-md shadow-slate-900/20"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Current Users ({users.length})</span>
+                </button>
 
-            <button
-              onClick={() => setActiveTab("interns_roster")}
-              className={`py-3.5 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
-                activeTab === "interns_roster"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <GraduationCap className="w-4 h-4" />
-              <span>Interns Cohort Roster ({internUsers.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("signups")}
-              className={`py-3.5 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
-                activeTab === "signups"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Pending Self-Signups ({signupRequests.length})</span>
-              {signupRequests.length > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              )}
-            </button>
-          </div>
-
-          {loading ? (
-            <Loader message="Loading directory records..." />
-          ) : activeTab === "users" ? (
-            <UserManagementTable users={users} roles={roles} onRefresh={loadData} />
-          ) : activeTab === "interns_roster" ? (
-            /* Interns Cohort Roster Tab */
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">Active Intern Roster ({filteredInterns.length})</h3>
-                  <p className="text-xs text-slate-500">Inspect 360° management profile, assigned mentor, projects, and deliverables</p>
-                </div>
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search intern name, email, university..."
-                    value={internSearch}
-                    onChange={(e) => setInternSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
+                <button
+                  onClick={() => setActiveTab("signups")}
+                  className={`h-full px-5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === "signups"
+                      ? "bg-amber-500 text-white shadow-md shadow-amber-500/20"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Pending Approvals ({signupRequests.length})</span>
+                  {signupRequests.length > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  )}
+                </button>
               </div>
 
-              {filteredInterns.length === 0 ? (
-                <EmptyState
-                  icon={GraduationCap}
-                  title="No interns found"
-                  description="No registered intern records match your search filter."
+              {/* Center: Search Input Bar */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={
+                    activeTab === "users"
+                      ? "Search current users by name, email, department..."
+                      : "Search pending signup candidates by name or email..."
+                  }
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full h-11 pl-10 pr-8 text-xs bg-slate-50 border border-slate-200/90 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium transition-all shadow-xs flex items-center"
                 />
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredInterns.map((intern) => {
-                    const matchedInternship = internships.find(i => i.intern_id === intern.id);
-                    const mentorName = matchedInternship?.mentor?.profile?.full_name || matchedInternship?.mentor?.email || "Unassigned";
-                    const matchedProject = projects.find(p => p.internship_id === matchedInternship?.id);
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
-                    return (
-                      <div
-                        key={intern.id}
-                        className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:border-blue-300 transition-all space-y-3"
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xs flex items-center justify-center">
-                                {intern.profile?.full_name?.slice(0, 2) || intern.email?.slice(0, 2)}
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-sm text-slate-900">
-                                  {intern.profile?.full_name || intern.email}
-                                </h4>
-                                <p className="text-[11px] text-slate-500">{intern.profile?.university || "University Student"}</p>
-                              </div>
-                            </div>
-                            <StatusBadge status={matchedInternship?.status || "active"} size="xs" />
-                          </div>
+              {/* Right: Action Buttons */}
+              <div className="flex items-center gap-2.5 flex-shrink-0">
+                <button
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`h-11 inline-flex items-center justify-center gap-2 px-5 rounded-2xl text-xs font-extrabold border transition-all shadow-xs whitespace-nowrap ${
+                    showAdvancedFilters || hasActiveFilters
+                      ? "bg-blue-50 text-blue-700 border-blue-300"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <Filter className="w-4 h-4 text-slate-600" />
+                  <span>Filters</span>
+                  {hasActiveFilters && (
+                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                  )}
+                </button>
 
-                          <div className="p-3 bg-slate-50 rounded-xl space-y-1 text-xs">
-                            <p className="text-slate-500">
-                              <strong className="text-slate-800">Supervising Mentor:</strong> {mentorName}
-                            </p>
-                            <p className="text-slate-500">
-                              <strong className="text-slate-800">Assigned Project:</strong> {matchedProject ? matchedProject.title : "None attached yet"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => setSelectedInternId(intern.id)}
-                          className="w-full py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Peek 360° Management Dossier</span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                <button
+                  onClick={() => setCreateUserOpen(true)}
+                  className="h-11 inline-flex items-center justify-center gap-2 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02] whitespace-nowrap"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add User</span>
+                </button>
+              </div>
             </div>
+
+            {/* Expandable Advanced Filters Drawer */}
+            {showAdvancedFilters && (
+              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 animate-fadeIn">
+                {/* Role Filter - for Current Users */}
+                {activeTab === "users" && (
+                  <div className="relative flex-1 min-w-[140px]">
+                    <select
+                      value={roleFilter}
+                      onChange={(e) => setRoleFilter(e.target.value)}
+                      className="w-full h-11 pl-3 pr-8 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium appearance-none cursor-pointer"
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="intern">Interns</option>
+                      <option value="mentor">Mentors</option>
+                      <option value="admin">Admins</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                )}
+
+                {/* Status Filter - for Current Users */}
+                {activeTab === "users" && (
+                  <div className="relative flex-1 min-w-[140px]">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full h-11 pl-3 pr-8 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium appearance-none cursor-pointer"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                      <option value="deactivated">Deactivated</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                )}
+
+                {/* Department Filter */}
+                {activeTab === "users" && (
+                  <div className="relative flex-1 min-w-[160px]">
+                    <select
+                      value={selectedDept}
+                      onChange={(e) => setSelectedDept(e.target.value)}
+                      className="w-full h-11 pl-3 pr-8 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium appearance-none cursor-pointer"
+                    >
+                      <option value="all">All Departments</option>
+                      {uniqueDepartments.map((dept) => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                )}
+
+                {/* From Date */}
+                <div className="flex-1 min-w-[130px]">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="w-full h-11 px-3 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                  />
+                </div>
+
+                {/* To Date */}
+                <div className="flex-1 min-w-[130px]">
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="w-full h-11 px-3 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                  />
+                </div>
+
+                {/* Always-visible Icon-only Reset Button */}
+                <button
+                  onClick={resetFilters}
+                  title="Reset Filters"
+                  className="h-11 w-11 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-2xl transition-colors flex-shrink-0"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ========================================================= */}
+          {/* CONTENT TABLE DATA                                        */}
+          {/* ========================================================= */}
+          {loading ? (
+            <Loader message="Loading records..." />
+          ) : activeTab === "users" ? (
+            <UserManagementTable
+              users={filteredUsers}
+              roles={roles}
+              onRefresh={loadData}
+              search={search}
+              roleFilter={roleFilter}
+              statusFilter={statusFilter}
+              deptFilter={selectedDept}
+            />
           ) : (
-            <SignupRequestsTable requests={signupRequests} onRefresh={loadData} />
+            <SignupRequestsTable requests={filteredSignups} onRefresh={loadData} />
           )}
 
           {/* Modals */}
@@ -240,12 +393,6 @@ export default function UsersPage() {
             isOpen={createUserOpen}
             onClose={() => setCreateUserOpen(false)}
             onUserCreated={loadData}
-          />
-
-          <BulkImportModal
-            isOpen={bulkImportOpen}
-            onClose={() => setBulkImportOpen(false)}
-            onImportCompleted={loadData}
           />
         </div>
       )}

@@ -27,6 +27,7 @@ export const adminService = {
     if (userData.university) searchParams.append("university", userData.university);
     if (userData.degree) searchParams.append("degree", userData.degree);
     if (userData.semester) searchParams.append("semester", userData.semester);
+    if (userData.duration_weeks) searchParams.append("duration_weeks", userData.duration_weeks);
 
     return apiRequest(`/admin/users/create?${searchParams.toString()}`, {
       method: "POST",

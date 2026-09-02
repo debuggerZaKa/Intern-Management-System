@@ -51,7 +51,7 @@ export default function SignupRequestsTable({ requests, onRefresh }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
       <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold text-slate-900 tracking-tight">Pending Self-Signup Requests</h3>

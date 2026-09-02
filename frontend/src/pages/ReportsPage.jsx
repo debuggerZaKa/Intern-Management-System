@@ -81,18 +81,9 @@ export default function ReportsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Weekly Progress Reports</h2>
-            <p className="text-xs text-slate-500">
-              {isIntern
-                ? "Document your weekly engineering achievements, learnings, and next week goals"
-                : "Review intern weekly progress reports, provide mentor ratings, and generate AI insights"}
-            </p>
-          </div>
-
-          {isIntern && (
+        {/* Actions Bar */}
+        {isIntern && (
+          <div className="flex items-center justify-end">
             <button
               onClick={() => {
                 setEditingReport(null);
@@ -103,8 +94,8 @@ export default function ReportsPage() {
               <Plus className="w-4 h-4" />
               <span>Submit Weekly Report</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 

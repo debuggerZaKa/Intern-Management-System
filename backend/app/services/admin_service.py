@@ -19,17 +19,22 @@ from app.auth.hashing import get_password_hash
 from app.services.audit_service import log_action
 
 
-def _ensure_active_internship(db: Session, intern_user: User) -> Internship:
+def _ensure_active_internship(db: Session, intern_user: User, duration_weeks: Optional[int] = None) -> Internship:
     """Helper to auto-create an active internship for an intern if none exists."""
+    weeks = duration_weeks if (duration_weeks is not None and duration_weeks > 0) else settings.INTERNSHIP_DURATION_WEEKS
     existing = db.query(Internship).filter(
         Internship.intern_id == intern_user.id,
         Internship.status == "active"
     ).first()
     if existing:
+        if duration_weeks is not None and duration_weeks > 0 and existing.duration_weeks != duration_weeks:
+            existing.duration_weeks = weeks
+            existing.end_date = existing.start_date + timedelta(weeks=weeks)
+            db.flush()
         return existing
 
     today = date.today()
-    end_date = today + timedelta(weeks=settings.INTERNSHIP_DURATION_WEEKS)
+    end_date = today + timedelta(weeks=weeks)
     dept = (
         intern_user.profile.department
         if (intern_user.profile and intern_user.profile.department)
@@ -41,7 +46,7 @@ def _ensure_active_internship(db: Session, intern_user: User) -> Internship:
         department=dept,
         start_date=today,
         end_date=end_date,
-        duration_weeks=settings.INTERNSHIP_DURATION_WEEKS,
+        duration_weeks=weeks,
         current_week=1,
         status="active"
     )
@@ -62,6 +67,7 @@ def admin_create_user(
     university: Optional[str] = None,
     degree: Optional[str] = None,
     semester: Optional[str] = None,
+    duration_weeks: Optional[int] = None,
 ) -> User:
     email = email.lower().strip()
     if db.query(User).filter(User.email == email).first():
@@ -95,10 +101,10 @@ def admin_create_user(
 
     # Automatically create an active internship if the created user is an intern
     if role_name == "intern":
-        _ensure_active_internship(db, user)
+        _ensure_active_internship(db, user, duration_weeks=duration_weeks)
 
     log_action(db, "user_created", actor_id=actor.id, target_user_id=user.id,
-               details={"email": email, "role": role_name})
+               details={"email": email, "role": role_name, "duration_weeks": duration_weeks})
     db.commit()
     db.refresh(user)
     return user

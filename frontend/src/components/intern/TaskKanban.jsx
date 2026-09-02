@@ -279,13 +279,13 @@ export default function TaskKanban({
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
       {/* List Header & Top-Right Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/90 p-4 rounded-2xl border border-slate-200/90 shadow-xs">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h3 className="text-sm font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-blue-600" />
             <span>Task Deliverables ({filteredTasks.length})</span>
           </h3>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 font-medium">
             {isIntern
               ? "Start assigned tasks, submit deliverable notes & links, and log hours"
               : "Assign deliverables, provide guidance notes, and review intern submissions"}
@@ -294,7 +294,7 @@ export default function TaskKanban({
 
         <div className="flex items-center gap-3 self-end sm:self-auto">
           {/* Top-Right Status Filter */}
-          <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-xs">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             <select
               value={statusFilter}
@@ -302,7 +302,7 @@ export default function TaskKanban({
               className="text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="all">All Statuses ({tasks.length})</option>
-              <option value="todo">To Do (Assigned) ({tasks.filter(t => t.status === "todo").length})</option>
+              <option value="todo">To Do ({tasks.filter(t => t.status === "todo").length})</option>
               <option value="in_progress">In Progress ({tasks.filter(t => t.status === "in_progress").length})</option>
               <option value="done">Completed ({tasks.filter(t => t.status === "done").length})</option>
             </select>
@@ -311,7 +311,7 @@ export default function TaskKanban({
           {allowCreate && (
             <button
               onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" />
               <span>Assign Task</span>

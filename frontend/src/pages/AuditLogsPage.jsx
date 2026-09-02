@@ -31,13 +31,6 @@ export default function AuditLogsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">System Security & Audit Trail</h2>
-          <p className="text-xs text-slate-500">
-            Immutable records of administrative operations, account activations, and permission modifications
-          </p>
-        </div>
-
         {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
         {loading ? <Loader message="Loading system audit logs..." /> : <AuditLogsViewer logs={logs} />}

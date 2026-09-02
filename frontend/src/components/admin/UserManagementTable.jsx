@@ -19,15 +19,27 @@ import Modal from "../common/Modal";
 import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 
-export default function UserManagementTable({ users = [], roles = [], onRefresh }) {
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedUser, setSelectedUser] = useState(null);
+export default function UserManagementTable({
+  users = [],
+  roles = [],
+  onRefresh,
+  search: externalSearch,
+  roleFilter: externalRoleFilter,
+  statusFilter: externalStatusFilter,
+  deptFilter: externalDeptFilter,
+}) {
+  const [internalSearch, setInternalSearch] = useState("");
+  const [internalRoleFilter, setInternalRoleFilter] = useState("all");
+  const [internalStatusFilter, setInternalStatusFilter] = useState("all");
   const [roleModalUser, setRoleModalUser] = useState(null);
   const [newRoleId, setNewRoleId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const isControlled = externalSearch !== undefined || externalRoleFilter !== undefined;
+  const search = isControlled ? (externalSearch || "") : internalSearch;
+  const roleFilter = isControlled ? (externalRoleFilter || "all") : internalRoleFilter;
+  const statusFilter = isControlled ? (externalStatusFilter || "all") : internalStatusFilter;
 
   // Filter users
   const filteredUsers = users.filter((u) => {
@@ -39,8 +51,9 @@ export default function UserManagementTable({ users = [], roles = [], onRefresh 
 
     const matchesRole = roleFilter === "all" || u.role?.name === roleFilter;
     const matchesStatus = statusFilter === "all" || u.status === statusFilter;
+    const matchesDept = !externalDeptFilter || externalDeptFilter === "all" || dept === externalDeptFilter.toLowerCase();
 
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole && matchesStatus && matchesDept;
   });
 
   const handleActivate = async (userId) => {
@@ -105,47 +118,49 @@ export default function UserManagementTable({ users = [], roles = [], onRefresh 
     <div className="space-y-4">
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-      {/* Controls Bar: Search + Filters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search by name, email, department..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
-          />
+      {/* Show inner Controls Bar only when not controlled by parent */}
+      {!isControlled && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by name, email, department..."
+              value={internalSearch}
+              onChange={(e) => setInternalSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={internalRoleFilter}
+              onChange={(e) => setInternalRoleFilter(e.target.value)}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+            >
+              <option value="all">All Roles</option>
+              <option value="intern">Interns</option>
+              <option value="mentor">Mentors</option>
+              <option value="admin">Admins</option>
+            </select>
+
+            <select
+              value={internalStatusFilter}
+              onChange={(e) => setInternalStatusFilter(e.target.value)}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="deactivated">Deactivated</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
-          >
-            <option value="all">All Roles</option>
-            <option value="intern">Interns</option>
-            <option value="mentor">Mentors</option>
-            <option value="admin">Admins</option>
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="deactivated">Deactivated</option>
-            <option value="archived">Archived</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Users Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Users Table Container */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
         {filteredUsers.length === 0 ? (
           <EmptyState
             title="No users match your filters"

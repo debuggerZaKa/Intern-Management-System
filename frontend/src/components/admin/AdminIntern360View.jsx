@@ -128,13 +128,16 @@ export default function AdminIntern360View({ internId, onBack }) {
     <div className="space-y-6 animate-fadeIn">
       {/* Top Back Header */}
       <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all shadow-xs"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Interns Roster</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            title="Back to Interns Roster"
+            className="w-10 h-10 rounded-2xl bg-white border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-extrabold text-slate-800">Back to Interns Roster</span>
+        </div>
 
         <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
           Executive Read-Only Dossier
