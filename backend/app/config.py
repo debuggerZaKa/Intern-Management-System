@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://postgres:admin123@localhost:5432/IMS"
 
     GROQ_API_KEY: str = ""
-    AI_MODEL: str = "llama-3.3-70b-versatile"
+    AI_MODEL: str = "openai/gpt-oss-120b"
     AI_ENABLED: bool = True
 
     # Comma-separated list of allowed CORS origins
