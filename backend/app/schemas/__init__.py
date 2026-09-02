@@ -3,12 +3,20 @@ from app.schemas.role import RoleResponse, PermissionResponse
 from app.schemas.user import UserResponse, ProfileResponse, ProfileUpdate, ChangeUserRoleRequest, UpdateUserStatusRequest
 from app.schemas.internship import InternshipCreate, InternshipUpdate, InternshipResponse
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
-from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
+from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskSubmitRequest
+
 from app.schemas.report import WeeklyReportCreate, WeeklyReportUpdate, WeeklyReportResponse
 from app.schemas.blocker import BlockerCreate, BlockerUpdate, BlockerResponse
 from app.schemas.feedback import FeedbackCreate, FeedbackUpdate, FeedbackResponse
 from app.schemas.evaluation import EvaluationCreate, EvaluationUpdate, EvaluationResponse
 from app.schemas.ai import AISummaryResponse, AIChatRequest, AIChatResponse, AIFinalSummaryResponse
+from app.schemas.mentorship_request import (
+    MentorshipRequestCreate,
+    MentorshipRequestRespond,
+    MentorshipRequestResponse,
+    InternBrief,
+    MentorBrief,
+)
 
 __all__ = [
     "Token",
@@ -47,4 +55,10 @@ __all__ = [
     "AIChatRequest",
     "AIChatResponse",
     "AIFinalSummaryResponse",
+    "MentorshipRequestCreate",
+    "MentorshipRequestRespond",
+    "MentorshipRequestResponse",
+    "InternBrief",
+    "MentorBrief",
 ]
+

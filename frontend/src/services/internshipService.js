@@ -23,4 +23,15 @@ export const internshipService = {
       body: internshipData,
     });
   },
+  approveCertificate: async (internshipId) => {
+    return apiRequest(`/evaluations/internship/${internshipId}/approve-certificate`, {
+      method: "POST",
+    });
+  },
+  issueCertificate: async (internshipId) => {
+    return apiRequest(`/evaluations/internship/${internshipId}/issue-certificate`, {
+      method: "POST",
+    });
+  },
 };
+

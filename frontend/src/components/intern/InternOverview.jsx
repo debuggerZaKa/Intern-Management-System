@@ -20,13 +20,16 @@ import { reportService } from "../../services/reportService";
 import { blockerService } from "../../services/blockerService";
 import StatCard from "../common/StatCard";
 import StatusBadge from "../common/StatusBadge";
+import MentorshipRequestsCard from "./MentorshipRequestsCard";
 
 export default function InternOverview({
   dashboard,
   onNavigateToTasks,
   onNavigateToReports,
   onNavigateToBlockers,
+  onAssignmentUpdated,
 }) {
+
   const [tasks, setTasks] = useState([]);
   const [reports, setReports] = useState([]);
   const [blockers, setBlockers] = useState([]);
@@ -58,14 +61,18 @@ export default function InternOverview({
 
   if (!dashboard || !dashboard.has_active_internship) {
     return (
-      <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm text-center max-w-lg mx-auto my-12 space-y-4">
-        <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-          <Briefcase className="w-7 h-7" />
+      <div className="space-y-6 max-w-2xl mx-auto my-6">
+        <MentorshipRequestsCard onAssignmentUpdated={onAssignmentUpdated} />
+
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+            <Briefcase className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">No Active Internship Track Found</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Your account is registered, but you have not yet been assigned to an active internship track. You can accept a mentorship request above or contact your NETSOL administrator.
+          </p>
         </div>
-        <h3 className="text-lg font-bold text-slate-900">No Active Internship Track Found</h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Your account is registered, but you have not yet been assigned to an active internship track. Please contact your NETSOL administrator or mentor.
-        </p>
       </div>
     );
   }
@@ -106,8 +113,12 @@ export default function InternOverview({
 
   return (
     <div className="space-y-6">
+      {/* Incoming Mentorship Requests Banner */}
+      <MentorshipRequestsCard onAssignmentUpdated={onAssignmentUpdated} />
+
       {/* 6-Week Journey Banner */}
       <div className="bg-gradient-to-r from-[#0B1E3F] via-[#0D2652] to-[#123974] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+
         {/* Ambient Glow */}
         <div className="absolute top-[-30%] right-[-10%] w-96 h-96 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
 

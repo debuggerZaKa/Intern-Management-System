@@ -5,7 +5,6 @@ import {
   Eye,
   FolderGit2,
   Filter,
-  Calendar,
   Clock,
   RotateCcw,
   X,
@@ -16,8 +15,10 @@ import {
   AlertTriangle,
   Sparkles,
   Users,
-  CheckCircle2,
-  FileText
+  ClipboardCheck,
+  History,
+  UserPlus,
+  BadgeCheck
 } from "lucide-react";
 import { mentorService } from "../../services/mentorService";
 import { projectService } from "../../services/projectService";
@@ -28,12 +29,16 @@ import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 import StatCard from "../common/StatCard";
 import InternDetailView from "./InternDetailView";
+import MentorAddInternModal from "./MentorAddInternModal";
 
 export default function MentorAssignedInternsView() {
   const [internships, setInternships] = useState([]);
+  const [alumniInternships, setAlumniInternships] = useState([]);
   const [projects, setProjects] = useState([]);
   const [attentionList, setAttentionList] = useState([]);
   const [selectedInternId, setSelectedInternId] = useState(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("active"); // 'active' | 'alumni'
 
   // Filter States
   const [search, setSearch] = useState("");
@@ -51,14 +56,16 @@ export default function MentorAssignedInternsView() {
     try {
       setLoading(true);
       setError(null);
-      const [internsData, projectsData, attentionData, settingsData] = await Promise.all([
-        mentorService.getAssignedInterns(),
+      const [activeData, alumniData, projectsData, attentionData, settingsData] = await Promise.all([
+        mentorService.getAssignedInterns({ status_filter: "active" }),
+        mentorService.getAssignedInterns({ status_filter: "alumni" }),
         projectService.getProjects().catch(() => []),
         mentorService.getInternsNeedingAttention().catch(() => []),
         adminService.getSettings().catch(() => null),
       ]);
 
-      setInternships(internsData || []);
+      setInternships(activeData || []);
+      setAlumniInternships(alumniData || []);
       setProjects(projectsData || []);
       setAttentionList(attentionData || []);
       if (settingsData && Array.isArray(settingsData.duration_options) && settingsData.duration_options.length > 0) {
@@ -76,8 +83,11 @@ export default function MentorAssignedInternsView() {
     loadData();
   }, []);
 
+  // The list to show based on active tab
+  const currentList = activeTab === "active" ? internships : alumniInternships;
+
   // Filter items based on search and filters
-  const displayedInternships = internships.filter((internship) => {
+  const displayedInternships = currentList.filter((internship) => {
     const internUser = internship.intern;
     const matchedProject = projects.find((p) => p.internship_id === internship.id);
 
@@ -175,26 +185,26 @@ export default function MentorAssignedInternsView() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Top Metric Cards Overview — reflect current filters */}
+      {/* Top Metric Cards Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Assigned Interns"
-          value={displayedInternships.length}
-          subtitle={hasActiveFilters ? "Matching current filters" : "Active supervised mentees"}
+          title="Active Interns"
+          value={internships.length}
+          subtitle="Currently supervised"
           icon={GraduationCap}
           color="blue"
         />
         <StatCard
-          title="Active Projects"
-          value={activeProjectsCount}
-          subtitle="Projects assigned & running"
-          icon={FolderGit2}
-          color="indigo"
+          title="Past / Alumni Interns"
+          value={alumniInternships.length}
+          subtitle="Evaluation submitted"
+          icon={History}
+          color="purple"
         />
         <StatCard
           title="Attention Required"
           value={urgentAttentionCount}
-          subtitle={urgentAttentionCount > 0 ? "Blockers or risk flag" : "All mentees on track"}
+          subtitle={urgentAttentionCount > 0 ? "Blockers or risk flag" : "All on track"}
           icon={AlertTriangle}
           color={urgentAttentionCount > 0 ? "amber" : "emerald"}
         />
@@ -207,17 +217,33 @@ export default function MentorAssignedInternsView() {
         />
       </div>
 
-      {/* ========================================================= */}
-      {/* UNIFIED FILTER & ACTION TOOLBAR CONTAINER CARD            */}
-      {/* ========================================================= */}
+      {/* UNIFIED FILTER & ACTION TOOLBAR */}
       <div className="bg-white p-5 rounded-3xl border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-          {/* Left: Section Title / Badge */}
-          <div className="h-11 bg-slate-100/80 px-4 rounded-2xl flex items-center gap-2 border border-slate-200/60 shadow-inner flex-shrink-0">
-            <Users className="w-4 h-4 text-blue-600" />
-            <span className="text-xs font-black text-slate-800">
-              Assigned Cohort ({internships.length})
-            </span>
+          {/* Left: Active/Alumni Tabs */}
+          <div className="h-11 bg-slate-100/80 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/60 shadow-inner flex-shrink-0">
+            <button
+              onClick={() => setActiveTab("active")}
+              className={`h-full px-4 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                activeTab === "active"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Active ({internships.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("alumni")}
+              className={`h-full px-4 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                activeTab === "alumni"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/20"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <BadgeCheck className="w-3.5 h-3.5" />
+              <span>Past / Alumni ({alumniInternships.length})</span>
+            </button>
           </div>
 
           {/* Center: Search Input Bar */}
@@ -240,7 +266,7 @@ export default function MentorAssignedInternsView() {
             )}
           </div>
 
-          {/* Right: Filters Toggle Button */}
+          {/* Right: Filters Toggle Button & Add Intern Button */}
           <div className="flex items-center gap-2.5 flex-shrink-0">
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -256,8 +282,17 @@ export default function MentorAssignedInternsView() {
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
               )}
             </button>
+
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="h-11 inline-flex items-center justify-center gap-2 px-5 rounded-2xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 active:scale-98 text-white shadow-md shadow-blue-600/25 transition-all whitespace-nowrap cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add</span>
+            </button>
           </div>
         </div>
+
 
         {/* Advanced Filters Drawer Inside Container */}
         {showAdvancedFilters && (
@@ -336,13 +371,16 @@ export default function MentorAssignedInternsView() {
       ) : displayedInternships.length === 0 ? (
         <EmptyState
           icon={GraduationCap}
-          title="No assigned interns found"
+          title={activeTab === "alumni" ? "No alumni interns yet" : "No assigned interns found"}
           description={
             hasActiveFilters
-              ? "No assigned intern records match your search or filter options."
-              : "You do not currently have any active mentees assigned. An administrator will assign interns to your supervision."
+              ? "No intern records match your search or filter options."
+              : activeTab === "alumni"
+              ? "Once you submit a final evaluation for an intern, they will appear here as past / alumni interns."
+              : "You do not currently have any active mentees. Use the Add button to send mentorship requests."
           }
           actionLabel={hasActiveFilters ? "Reset Filters" : null}
+
           onAction={hasActiveFilters ? resetFilters : null}
         />
       ) : (
@@ -408,7 +446,7 @@ export default function MentorAssignedInternsView() {
                     </p>
                   </div>
 
-                  {/* Column 3: Project & AI Health */}
+                  {/* Column 3: Project & Status */}
                   <div className="sm:col-span-3 space-y-1">
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 truncate">
                       <FolderGit2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
@@ -416,18 +454,29 @@ export default function MentorAssignedInternsView() {
                     </p>
                     <div className="flex items-center gap-2">
                       <StatusBadge
-                        status={isAttention ? "needs_attention" : "on_track"}
+                        status={activeTab === "alumni" ? "completed" : (isAttention ? "needs_attention" : "on_track")}
                         size="xs"
                       />
                       <span className="text-[10px] text-slate-400 font-medium">
-                        {internship.status === "active" ? "Active Cohort" : internship.status}
+                        {activeTab === "alumni" ? "Alumni / Past Intern" : "Active Cohort"}
                       </span>
                     </div>
                   </div>
 
                   {/* Column 4: Actions */}
                   <div className="sm:col-span-2 flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                    {/* Inspect Profile Squircle Button */}
+                    {/* Final Evaluation button – only for active interns */}
+                    {activeTab === "active" && (
+                      <button
+                        onClick={() => setSelectedInternId(internship.intern_id || internUser?.id)}
+                        title="Submit Final Evaluation"
+                        className="h-8 px-3 bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded-xl text-[11px] font-extrabold flex items-center gap-1.5 transition-all"
+                      >
+                        <ClipboardCheck className="w-3.5 h-3.5" />
+                        <span>Evaluate</span>
+                      </button>
+                    )}
+                    {/* Inspect Profile Button */}
                     <button
                       onClick={() => setSelectedInternId(internship.intern_id || internUser?.id)}
                       title="Inspect Mentee Profile & Performance"
@@ -442,6 +491,14 @@ export default function MentorAssignedInternsView() {
           </div>
         </div>
       )}
+
+      {/* Mentor Add Intern Modal */}
+      <MentorAddInternModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onRequestSent={() => loadData()}
+      />
     </div>
   );
 }
+

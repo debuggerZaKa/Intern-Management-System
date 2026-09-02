@@ -3,6 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.config import settings
+from app.database import Base, engine
+import app.models  # register all models in metadata
+
+# Auto-create newly added tables if they do not exist
+Base.metadata.create_all(bind=engine)
+
 from app.routers import (
     auth_router,
     admin_router,

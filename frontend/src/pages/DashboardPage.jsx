@@ -59,7 +59,9 @@ export default function DashboardPage() {
               onNavigateToTasks={() => navigate("/tasks")}
               onNavigateToReports={() => navigate("/reports")}
               onNavigateToBlockers={() => navigate("/blockers")}
+              onAssignmentUpdated={loadDashboardData}
             />
+
           )}
         </>
       )}

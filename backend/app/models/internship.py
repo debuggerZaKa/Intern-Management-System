@@ -17,10 +17,14 @@ class Internship(Base):
     # Duration from config; stored here for historical accuracy
     duration_weeks = Column(Integer, nullable=False, default=6)
     current_week = Column(Integer, default=1, nullable=False)
-    # active, completed, extended, terminated
+    # active, waiting_certificate_approval, pending_certificate_generation, completed, extended, terminated
     status = Column(String(50), default="active", nullable=False)
+    certificate_id = Column(String(100), nullable=True)
+    certificate_approved_at = Column(DateTime(timezone=True), nullable=True)
+    certificate_issued_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 
     intern = relationship("User", foreign_keys=[intern_id], back_populates="internships_as_intern")
     mentor = relationship("User", foreign_keys=[mentor_id], back_populates="internships_as_mentor")

@@ -84,12 +84,14 @@ def assign_mentor(
     current = get_active_assignment(db, internship.id)
     if current:
         if current.mentor_id == mentor_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Intern is already assigned to this mentor",
-            )
+            internship.mentor_id = mentor_id
+            if notes:
+                current.notes = notes
+            db.commit()
+            return current
         current.is_active = False
         current.end_date = datetime.now(timezone.utc)
+
 
     new_assignment = MentorInternAssignment(
         internship_id=internship.id,

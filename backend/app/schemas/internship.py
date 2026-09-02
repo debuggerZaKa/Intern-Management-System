@@ -33,8 +33,12 @@ class InternshipResponse(InternshipBase):
     intern_id: int
     mentor_id: Optional[int] = None
     duration_weeks: int = 6
+    certificate_id: Optional[str] = None
+    certificate_approved_at: Optional[datetime] = None
+    certificate_issued_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     intern: Optional[UserResponse] = None
     mentor: Optional[UserResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+

@@ -7,8 +7,8 @@ from app.auth.dependencies import get_db, get_current_user
 from app.auth.decorators import require_permission
 from app.constants.permissions import PERMISSIONS
 from app.models.user import User
-from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
-from app.services.task_service import get_tasks, get_task_by_id, create_task, update_task, delete_task
+from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskSubmitRequest
+from app.services.task_service import get_tasks, get_task_by_id, create_task, update_task, delete_task, submit_task
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -24,17 +24,15 @@ def read_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.TASK.READ))
 ):
-    # If intern, default to their own tasks
-    if current_user.role.name == "intern" and not intern_id:
-        intern_id = current_user.id
-    
     return get_tasks(
         db,
+        current_user=current_user,
         intern_id=intern_id,
         project_id=project_id,
         status_filter=status_filter,
         week_number=week_number
     )
+
 
 @router.post("/upload")
 async def upload_task_file(
@@ -86,6 +84,15 @@ def edit_task(
 ):
     return update_task(db, task_id, req, current_user)
 
+@router.post("/{task_id}/submit", response_model=TaskResponse)
+def submit_task_deliverables(
+    task_id: int,
+    req: TaskSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERMISSIONS.TASK.UPDATE))
+):
+    return submit_task(db, task_id, req, current_user)
+
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_task(
     task_id: int,
@@ -94,3 +101,4 @@ def remove_task(
 ):
     delete_task(db, task_id, current_user)
     return None
+

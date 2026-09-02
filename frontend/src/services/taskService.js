@@ -20,6 +20,12 @@ export const taskService = {
       body: taskData,
     });
   },
+  submitTask: async (taskId, submissionData) => {
+    return apiRequest(`/tasks/${taskId}/submit`, {
+      method: "POST",
+      body: submissionData,
+    });
+  },
   deleteTask: async (taskId) => {
     return apiRequest(`/tasks/${taskId}`, {
       method: "DELETE",
@@ -34,3 +40,4 @@ export const taskService = {
     });
   },
 };
+

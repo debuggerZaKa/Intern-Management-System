@@ -9,6 +9,7 @@ class TaskBase(BaseModel):
     submission_notes: Optional[str] = None
     submission_url: Optional[str] = None
     attachment_url: Optional[str] = None
+    submitted_at: Optional[datetime] = None
     priority: str = "medium"
     status: str = "todo"
     week_number: int = 1
@@ -19,6 +20,11 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     project_id: int
 
+class TaskSubmitRequest(BaseModel):
+    submission_notes: Optional[str] = None
+    submission_url: Optional[str] = None
+    attachment_url: Optional[str] = None
+
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -26,6 +32,7 @@ class TaskUpdate(BaseModel):
     submission_notes: Optional[str] = None
     submission_url: Optional[str] = None
     attachment_url: Optional[str] = None
+    submitted_at: Optional[datetime] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     week_number: Optional[int] = None
@@ -40,3 +47,4 @@ class TaskResponse(TaskBase):
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+

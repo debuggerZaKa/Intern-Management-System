@@ -37,3 +37,8 @@ class User(Base):
     assignments = relationship("MentorInternAssignment", foreign_keys="[MentorInternAssignment.intern_id]", back_populates="intern")
     # Assignments as mentor
     mentor_assignments = relationship("MentorInternAssignment", foreign_keys="[MentorInternAssignment.mentor_id]", back_populates="mentor")
+
+    # Mentorship Requests
+    mentorship_requests_sent = relationship("MentorshipRequest", foreign_keys="[MentorshipRequest.mentor_id]", back_populates="mentor")
+    mentorship_requests_received = relationship("MentorshipRequest", foreign_keys="[MentorshipRequest.intern_id]", back_populates="intern")
+

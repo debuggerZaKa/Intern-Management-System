@@ -7,7 +7,14 @@ from app.constants.permissions import PERMISSIONS
 from app.models.user import User
 from app.models.internship import Internship
 from app.schemas.evaluation import EvaluationCreate, EvaluationUpdate, EvaluationResponse
-from app.services.evaluation_service import get_evaluation, create_evaluation, update_evaluation
+from app.services.evaluation_service import (
+    get_evaluation,
+    create_evaluation,
+    update_evaluation,
+    approve_certificate,
+    issue_certificate
+)
+
 
 router = APIRouter(prefix="/evaluations", tags=["End-of-Internship Evaluations"])
 
@@ -90,3 +97,35 @@ def export_evaluation_report(
             "ai_summary": evaluation.ai_summary if evaluation else None,
         } if evaluation else None,
     }
+
+
+@router.post("/internship/{internship_id}/approve-certificate")
+def admin_approve_certificate(
+    internship_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERMISSIONS.USER.UPDATE))
+):
+    """Admin reviews and approves student for certificate generation."""
+    internship = approve_certificate(db, internship_id, current_user)
+    return {
+        "message": "Certificate approved by administrator. Student is now queued for certificate generation.",
+        "status": internship.status,
+        "internship_id": internship.id
+    }
+
+
+@router.post("/internship/{internship_id}/issue-certificate")
+def admin_issue_certificate(
+    internship_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERMISSIONS.USER.UPDATE))
+):
+    """Admin issues certificate and marks student as Certified Alumni."""
+    internship = issue_certificate(db, internship_id, current_user)
+    return {
+        "message": "Certificate generated and issued successfully. Student is now a Certified Alumni.",
+        "status": internship.status,
+        "internship_id": internship.id,
+        "certificate_id": internship.certificate_id
+    }
+

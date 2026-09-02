@@ -17,6 +17,7 @@ from app.models.ai_insight import AIInsight, AIChatLog
 from app.models.audit_log import AuditLog
 from app.models.system_setting import SystemSetting
 from app.models.password_reset import PasswordResetToken
+from app.models.mentorship_request import MentorshipRequest
 
 __all__ = [
     "Base",
@@ -39,4 +40,6 @@ __all__ = [
     "AuditLog",
     "SystemSetting",
     "PasswordResetToken",
+    "MentorshipRequest",
 ]
+

@@ -17,8 +17,10 @@ class Task(Base):
     submission_notes = Column(Text, nullable=True)
     submission_url = Column(String(500), nullable=True)
     attachment_url = Column(String(500), nullable=True)
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
   
     priority = Column(String(50), default="medium", nullable=False)
+
  
     status = Column(String(50), default="todo", nullable=False)
     week_number = Column(Integer, default=1, nullable=False)

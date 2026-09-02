@@ -42,4 +42,17 @@ export const internService = {
   getAIInsights: async () => {
     return apiRequest("/interns/me/ai-insights");
   },
+
+  // Mentorship requests
+  getMentorshipRequests: async () => {
+    return apiRequest("/interns/me/mentorship-requests");
+  },
+
+  respondToMentorshipRequest: async (requestId, action) => {
+    return apiRequest(`/interns/me/mentorship-requests/${requestId}/respond`, {
+      method: "POST",
+      body: { action },
+    });
+  },
 };
+

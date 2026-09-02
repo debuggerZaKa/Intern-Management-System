@@ -16,7 +16,8 @@ def read_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.PROJECT.READ))
 ):
-    return get_projects(db, internship_id=internship_id)
+    return get_projects(db, current_user=current_user, internship_id=internship_id)
+
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 def read_project(

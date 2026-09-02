@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -5,16 +6,23 @@ from app.models.task import Task
 from app.models.project import Project
 from app.models.internship import Internship
 from app.models.user import User
-from app.schemas.task import TaskCreate, TaskUpdate
+from app.schemas.task import TaskCreate, TaskUpdate, TaskSubmitRequest
 
 def get_tasks(
     db: Session,
+    current_user: User,
     intern_id: Optional[int] = None,
     project_id: Optional[int] = None,
     status_filter: Optional[str] = None,
     week_number: Optional[int] = None
 ) -> List[Task]:
     query = db.query(Task)
+    
+    if current_user.role.name == "mentor":
+        query = query.join(Project, Task.project_id == Project.id).join(Internship, Project.internship_id == Internship.id).filter(Internship.mentor_id == current_user.id)
+    elif current_user.role.name == "intern":
+        query = query.filter(Task.intern_id == current_user.id)
+
     if intern_id:
         query = query.filter(Task.intern_id == intern_id)
     if project_id:
@@ -27,6 +35,24 @@ def get_tasks(
 
 def get_task_by_id(db: Session, task_id: int) -> Optional[Task]:
     return db.query(Task).filter(Task.id == task_id).first()
+
+def submit_task(db: Session, task_id: int, req: TaskSubmitRequest, current_user: User) -> Task:
+    task = get_task_by_id(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    if current_user.role.name == "intern" and task.intern_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot submit deliverables for another intern's task")
+
+    task.submission_notes = req.submission_notes
+    task.submission_url = req.submission_url
+    task.attachment_url = req.attachment_url
+    task.submitted_at = datetime.now(timezone.utc)
+    task.status = "done"
+    db.commit()
+    db.refresh(task)
+    return task
+
 
 def create_task(db: Session, req: TaskCreate, current_user: User) -> Task:
     project = db.query(Project).filter(Project.id == req.project_id).first()
