@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { User, Mail, Phone, GraduationCap, Building2, Globe, Github, Linkedin, CheckCircle2, Lock, KeyRound } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { User, Mail, Phone, GraduationCap, Building2, Globe, Github, Linkedin, CheckCircle2, Lock, KeyRound, Camera } from "lucide-react";
 import { userService } from "../../services/userService";
 import { authService } from "../../services/authService";
 import { useAuth } from "../../hooks/useAuth";
+import { getMediaUrl } from "../../utils/mediaUtils";
 import ErrorMessage from "../common/ErrorMessage";
 import StatusBadge from "../common/StatusBadge";
 
 export default function ProfileSettings() {
   const { user, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("profile"); // "profile" or "password"
+  const avatarInputRef = useRef(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     full_name: "",
@@ -109,14 +112,61 @@ export default function ProfileSettings() {
     }
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setAvatarUploading(true);
+      const updatedProfile = await userService.uploadMyAvatar(file);
+      setUser((prev) => (prev ? { ...prev, profile: updatedProfile } : prev));
+    } catch (err) {
+      alert(`Failed to upload avatar: ${err.message}`);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const userAvatar = user?.profile?.avatar_url
+    ? getMediaUrl(user.profile.avatar_url)
+    : null;
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {/* Hidden File Input for Avatar Upload */}
+      <input
+        type="file"
+        ref={avatarInputRef}
+        onChange={handleAvatarUpload}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* Account Info Header */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xl flex items-center justify-center shadow-md shadow-blue-500/20">
-            {user?.profile?.full_name?.slice(0, 2) || user?.email?.slice(0, 2) || "U"}
+          <div className="relative">
+            {userAvatar ? (
+              <img
+                src={userAvatar}
+                alt={user?.profile?.full_name || "Profile"}
+                className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-md shadow-blue-500/10 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xl flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0">
+                {user?.profile?.full_name?.slice(0, 2) || user?.email?.slice(0, 2) || "U"}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              title="Upload profile photo"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md border-2 border-white flex items-center justify-center cursor-pointer transition-all hover:scale-110"
+            >
+              <Camera className="w-3 h-3" />
+            </button>
           </div>
+
           <div>
             <h2 className="text-lg font-bold text-slate-900">
               {user?.profile?.full_name || user?.email}

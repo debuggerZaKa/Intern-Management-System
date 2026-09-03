@@ -18,6 +18,7 @@ import StatusBadge from "../common/StatusBadge";
 import Modal from "../common/Modal";
 import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
+import UserAvatar from "../common/UserAvatar";
 
 export default function UserManagementTable({
   users = [],
@@ -184,9 +185,11 @@ export default function UserManagementTable({
                   <tr key={u.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-bold flex items-center justify-center text-xs shadow-sm">
-                          {u.profile?.full_name?.slice(0, 2) || u.email?.slice(0, 2) || "U"}
-                        </div>
+                        <UserAvatar
+                          avatarUrl={u.profile?.avatar_url}
+                          name={u.profile?.full_name || u.email}
+                          size="md"
+                        />
                         <div>
                           <p className="font-bold text-slate-900">{u.profile?.full_name || "Unnamed User"}</p>
                           <p className="text-[11px] text-slate-400">{u.email}</p>

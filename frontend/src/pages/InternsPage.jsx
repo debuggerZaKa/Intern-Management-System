@@ -30,6 +30,8 @@ import AdminIntern360View from "../components/admin/AdminIntern360View";
 import CreateUserModal from "../components/admin/CreateUserModal";
 import CertificateModal from "../components/admin/CertificateModal";
 import StatCard from "../components/common/StatCard";
+import UserAvatar from "../components/common/UserAvatar";
+import { getPrimaryInternship, isTrackOngoing } from "../utils/internshipUtils";
 
 export default function InternsPage() {
   const [interns, setInterns] = useState([]);
@@ -92,10 +94,10 @@ export default function InternsPage() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Categorize Interns
+  // Categorize Interns: an intern is active if their primary current track is ongoing
   const activeEnrolledInterns = interns.filter((intern) => {
-    const matched = internships.find((i) => i.intern_id === intern.id);
-    return matched?.status !== "completed";
+    const primaryTrack = getPrimaryInternship(intern.id, internships);
+    return !primaryTrack || isTrackOngoing(primaryTrack.status);
   });
 
   const pendingCertificateInternships = internships.filter((i) => {
@@ -103,7 +105,7 @@ export default function InternsPage() {
   });
 
   const assignedMentorsCount = activeEnrolledInterns.filter((intern) => {
-    const matched = internships.find((i) => i.intern_id === intern.id);
+    const matched = getPrimaryInternship(intern.id, internships);
     return matched?.mentor_id != null;
   }).length;
 
@@ -112,7 +114,7 @@ export default function InternsPage() {
   // Filter items based on active tab & filters
   const displayedItems = (activeTab === "current" ? activeEnrolledInterns : pendingCertificateInternships).filter((item) => {
     const internUser = activeTab === "current" ? item : item.intern;
-    const matchedInternship = activeTab === "current" ? internships.find((i) => i.intern_id === item.id) : item;
+    const matchedInternship = activeTab === "current" ? getPrimaryInternship(item.id, internships) : item;
     const matchedProject = projects.find((p) => p.internship_id === matchedInternship?.id);
     const mentorName = matchedInternship?.mentor?.profile?.full_name || matchedInternship?.mentor?.email || "";
 
@@ -466,7 +468,7 @@ export default function InternsPage() {
               <div className="divide-y divide-slate-100">
                 {displayedItems.map((item) => {
                   const internUser = activeTab === "current" ? item : item.intern;
-                  const matchedInternship = activeTab === "current" ? internships.find((i) => i.intern_id === item.id) : item;
+                  const matchedInternship = activeTab === "current" ? getPrimaryInternship(item.id, internships) : item;
                   const matchedProject = projects.find((p) => p.internship_id === matchedInternship?.id);
                   const internName = internUser?.profile?.full_name || internUser?.email || "Intern Student";
                   const mentorName = matchedInternship?.mentor?.profile?.full_name || matchedInternship?.mentor?.email || "Unassigned";
@@ -479,9 +481,11 @@ export default function InternsPage() {
                     >
                       {/* Column 1: Intern Name & Details */}
                       <div className="sm:col-span-4 flex items-center gap-3.5">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xs flex items-center justify-center shadow-xs flex-shrink-0">
-                          {internName.slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar
+                          avatarUrl={internUser?.profile?.avatar_url}
+                          name={internName}
+                          size="md"
+                        />
                         <div className="min-w-0">
                           <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
                             {internName}

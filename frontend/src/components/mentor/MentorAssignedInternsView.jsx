@@ -30,6 +30,8 @@ import ErrorMessage from "../common/ErrorMessage";
 import StatCard from "../common/StatCard";
 import InternDetailView from "./InternDetailView";
 import MentorAddInternModal from "./MentorAddInternModal";
+import { getUniqueInternCurrentTracks } from "../../utils/internshipUtils";
+import UserAvatar from "../common/UserAvatar";
 
 export default function MentorAssignedInternsView() {
   const [internships, setInternships] = useState([]);
@@ -64,7 +66,7 @@ export default function MentorAssignedInternsView() {
         adminService.getSettings().catch(() => null),
       ]);
 
-      setInternships(activeData || []);
+      setInternships(getUniqueInternCurrentTracks(activeData || []));
       setAlumniInternships(alumniData || []);
       setProjects(projectsData || []);
       setAttentionList(attentionData || []);
@@ -409,10 +411,12 @@ export default function MentorAssignedInternsView() {
                 >
                   {/* Column 1: Intern Name & Details */}
                   <div className="sm:col-span-4 flex items-center gap-3.5">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xs flex items-center justify-center shadow-xs flex-shrink-0">
-                        {internName.slice(0, 2).toUpperCase()}
-                      </div>
+                    <div className="relative flex-shrink-0">
+                      <UserAvatar
+                        avatarUrl={internUser?.profile?.avatar_url}
+                        name={internName}
+                        size="md"
+                      />
                       {isAttention && (
                         <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 border-2 border-white rounded-full animate-ping" />
                       )}

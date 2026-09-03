@@ -31,4 +31,14 @@ export const projectService = {
       method: "DELETE",
     });
   },
+
+  uploadProjectImage: async (projectId, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest(`/projects/${projectId}/image`, {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    });
+  },
 };

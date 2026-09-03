@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, SlidersHorizontal, User } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
+import { getMediaUrl } from "../../utils/mediaUtils";
 
 export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
   const { user } = useAuth();
@@ -69,9 +70,17 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
             </span>
           </div>
 
-          <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300/80 text-slate-900 font-black flex items-center justify-center text-sm shadow-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
-            {initial}
-          </div>
+          {user?.profile?.avatar_url ? (
+            <img
+              src={getMediaUrl(user.profile.avatar_url)}
+              alt={fullName}
+              className="w-10 h-10 rounded-full object-cover border border-slate-300 shadow-xs flex-shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300/80 text-slate-900 font-black flex items-center justify-center text-sm shadow-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+              {initial}
+            </div>
+          )}
         </Link>
       </div>
     </header>

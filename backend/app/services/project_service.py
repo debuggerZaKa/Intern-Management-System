@@ -61,6 +61,7 @@ def create_project(db: Session, req: ProjectCreate, current_user: User) -> Proje
         description=req.description,
         technologies=req.technologies,
         repo_url=req.repo_url,
+        image_url=req.image_url,
         status=req.status or "in_progress"
     )
     db.add(project)

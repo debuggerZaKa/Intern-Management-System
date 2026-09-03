@@ -31,4 +31,22 @@ export const userService = {
       body: profileData,
     });
   },
+  uploadAvatar: async (userId, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest(`/users/${userId}/avatar`, {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    });
+  },
+  uploadMyAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest("/users/profile/me/avatar", {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    });
+  },
 };
