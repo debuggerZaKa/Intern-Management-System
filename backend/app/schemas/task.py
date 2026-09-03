@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 
@@ -19,6 +19,8 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     project_id: int
+    intern_id: Optional[int] = None
+    intern_ids: Optional[List[int]] = None
 
 class TaskSubmitRequest(BaseModel):
     submission_notes: Optional[str] = None

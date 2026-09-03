@@ -105,69 +105,33 @@ export default function TasksPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
-              {isIntern ? "My Engineering Task Board" : "Tasks Master Directory"}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {isIntern
-                ? "View your mentor-assigned engineering deliverables, start tasks, and log completed hours"
-                : "Assign, organize, and monitor task deliverables across engineering projects and intern tracks"}
-            </p>
-          </div>
+      <div className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">
+            Task Deliverables
+          </h2>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Project Filter */}
-            <select
-              value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
-            >
-              <option value="all">All Projects ({projects.length})</option>
-              {projects.map((proj) => (
-                <option key={proj.id} value={proj.id}>
-                  Project: {proj.title}
-                </option>
-              ))}
-            </select>
-
-            {/* Intern Filter - Admin & Mentor only */}
-            {(isAdmin || isMentor) && (
+          {(isAdmin || isMentor) && interns.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Intern:</span>
               <select
                 value={internFilter}
                 onChange={(e) => {
                   const internId = e.target.value;
                   setInternFilter(internId);
-                  setWeekFilter("all");
                   loadSelectedInternship(internId);
                 }}
-                className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
+                className="px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
               >
-                <option value="">All Interns</option>
+                <option value="">All Interns ({interns.length})</option>
                 {interns.map((intern) => (
                   <option key={intern.id} value={intern.id}>
                     {intern.profile?.full_name || intern.email}
                   </option>
                 ))}
               </select>
-            )}
-
-            {/* Week Filter */}
-            <select
-              value={weekFilter}
-              onChange={(e) => setWeekFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold text-slate-800 shadow-xs"
-            >
-              <option value="all">All Weeks</option>
-              {[1, 2, 3, 4, 5, 6].map((w) => (
-                <option key={w} value={w}>
-                  Week {w}
-                </option>
-              ))}
-            </select>
-          </div>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -183,6 +147,7 @@ export default function TasksPage() {
           <TaskKanban
             tasks={tasks}
             projects={projects}
+            internship={selectedInternship}
             onRefresh={loadTasks}
             allowCreate={isMentor || isAdmin}
             isIntern={isIntern}

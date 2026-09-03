@@ -28,11 +28,21 @@ router = APIRouter(prefix="/mentors", tags=["Mentor Portal"])
 
 
 def _verify_mentor_access_to_intern(db: Session, mentor_id: int, intern_id: int) -> Internship:
-    """Object-level authorization: ensure intern was/is assigned to mentor."""
+    """Object-level authorization: ensure intern was/is assigned to mentor, prioritizing active tracks."""
+    # First search for active/extended ongoing internship
     internship = db.query(Internship).filter(
         Internship.intern_id == intern_id,
-        Internship.mentor_id == mentor_id
-    ).first()
+        Internship.mentor_id == mentor_id,
+        Internship.status.in_(["active", "extended"])
+    ).order_by(Internship.id.desc()).first()
+
+    # Fallback to most recent internship
+    if not internship:
+        internship = db.query(Internship).filter(
+            Internship.intern_id == intern_id,
+            Internship.mentor_id == mentor_id
+        ).order_by(Internship.id.desc()).first()
+
     if not internship:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -55,7 +65,7 @@ def get_assigned_interns(
         query = query.filter(Internship.status.in_(["waiting_certificate_approval", "pending_certificate_generation", "completed"]))
     elif status_filter and status_filter != "all":
         query = query.filter(Internship.status == status_filter)
-    return query.all()
+    return query.order_by(Internship.id.desc()).all()
 
 
 
@@ -67,9 +77,14 @@ def get_assigned_intern_details(
 ):
     """View details and profile of an assigned intern."""
     if mentor.role.name == "admin":
-        internship = db.query(Internship).filter(Internship.intern_id == intern_id, Internship.status == "active").first()
+        internship = db.query(Internship).filter(
+            Internship.intern_id == intern_id,
+            Internship.status.in_(["active", "extended"])
+        ).order_by(Internship.id.desc()).first()
         if not internship:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active internship not found")
+            internship = db.query(Internship).filter(Internship.intern_id == intern_id).order_by(Internship.id.desc()).first()
+        if not internship:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Internship record not found")
         return internship
     return _verify_mentor_access_to_intern(db, mentor.id, intern_id)
 
@@ -81,10 +96,17 @@ def get_assigned_intern_reports(
     mentor: User = Depends(get_current_mentor)
 ):
     """View weekly reports submitted by an assigned intern."""
+    internship = None
     if mentor.role.name != "admin":
-        _verify_mentor_access_to_intern(db, mentor.id, intern_id)
+        internship = _verify_mentor_access_to_intern(db, mentor.id, intern_id)
+    else:
+        internship = db.query(Internship).filter(
+            Internship.intern_id == intern_id,
+            Internship.status.in_(["active", "extended"])
+        ).order_by(Internship.id.desc()).first()
+        if not internship:
+            internship = db.query(Internship).filter(Internship.intern_id == intern_id).order_by(Internship.id.desc()).first()
 
-    internship = db.query(Internship).filter(Internship.intern_id == intern_id).first()
     if not internship:
         return []
     return db.query(WeeklyReport).filter(WeeklyReport.internship_id == internship.id).order_by(WeeklyReport.week_number.asc()).all()

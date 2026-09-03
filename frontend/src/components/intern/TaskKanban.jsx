@@ -16,12 +16,18 @@ import {
   UploadCloud,
   FileText,
   MessageSquare,
-  Paperclip,
   Send,
-  Filter
+  Filter,
+  Calendar,
+  Search,
+  X,
+  Paperclip,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import { taskService } from "../../services/taskService";
 import { projectService } from "../../services/projectService";
+import { calculateWeekFromStartDate, getTodayDateStr, formatTaskDate } from "../../utils/taskDateUtils";
 import StatusBadge from "../common/StatusBadge";
 import Modal from "../common/Modal";
 import EmptyState from "../common/EmptyState";
@@ -30,6 +36,7 @@ import ErrorMessage from "../common/ErrorMessage";
 export default function TaskKanban({
   tasks = [],
   projects: initialProjects = [],
+  internship = null,
   onRefresh,
   allowCreate = false,
   isIntern = false,
@@ -37,7 +44,17 @@ export default function TaskKanban({
   isMentor = false,
 }) {
   const [projectsList, setProjectsList] = useState(initialProjects || []);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("all"); // "all" | "pending" | "completed"
+  
+  // Search and Advanced Filters
+  const [search, setSearch] = useState("");
+  const [selectedWeek, setSelectedWeek] = useState("all");
+  const [selectedPriority, setSelectedPriority] = useState("all");
+  const [selectedProject, setSelectedProject] = useState("all");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Modals state
   const [modalOpen, setModalOpen] = useState(false);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [submittingTask, setSubmittingTask] = useState(null);
@@ -49,6 +66,7 @@ export default function TaskKanban({
     description: "",
     mentor_notes: "",
     submission_url: "",
+    due_date: getTodayDateStr(),
     week_number: 1,
     priority: "medium",
     status: "todo",
@@ -77,6 +95,11 @@ export default function TaskKanban({
     }
   }, [initialProjects]);
 
+  const getProjectStartDate = (projId, list = projectsList) => {
+    const proj = (list || []).find((p) => String(p.id) === String(projId));
+    return proj?.internship?.start_date || internship?.start_date || getTodayDateStr();
+  };
+
   const loadProjectsForModal = async () => {
     try {
       setFetchingProjects(true);
@@ -98,13 +121,17 @@ export default function TaskKanban({
 
     const currentList = await loadProjectsForModal();
     const defaultProjectId = currentList[0]?.id ? String(currentList[0].id) : "";
+    const today = getTodayDateStr();
+    const projStart = getProjectStartDate(defaultProjectId, currentList);
+    const autoWeek = calculateWeekFromStartDate(projStart, today);
 
     setFormData({
       title: "",
       description: "",
       mentor_notes: "",
       submission_url: "",
-      week_number: 1,
+      due_date: today,
+      week_number: autoWeek,
       priority: "medium",
       status: "todo",
       estimated_hours: 4,
@@ -118,18 +145,21 @@ export default function TaskKanban({
     setEditingTask(task);
     setError(null);
     const currentList = await loadProjectsForModal();
+    const projId = task.project_id ? String(task.project_id) : (currentList[0]?.id ? String(currentList[0].id) : "");
+    const taskDate = task.due_date ? String(task.due_date).slice(0, 10) : getTodayDateStr();
 
     setFormData({
       title: task.title || "",
       description: task.description || "",
       mentor_notes: task.mentor_notes || "",
       submission_url: task.submission_url || "",
+      due_date: taskDate,
       week_number: task.week_number || 1,
       priority: task.priority || "medium",
       status: task.status || "todo",
       estimated_hours: task.estimated_hours || 0,
       actual_hours: task.actual_hours || 0,
-      project_id: task.project_id ? String(task.project_id) : (currentList[0]?.id ? String(currentList[0].id) : ""),
+      project_id: projId,
     });
     setModalOpen(true);
   };
@@ -183,58 +213,52 @@ export default function TaskKanban({
       setSubmittingTask(null);
       onRefresh?.();
     } catch (err) {
-      console.error("Failed to submit task:", err);
-      setError(err.message || "Failed to submit task deliverable.");
+      setError(err.message || "Failed to submit task deliverable");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveTaskByMentor = async (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      setError("Please enter a task title.");
+      setError("Task title is required");
       return;
     }
     if (!formData.project_id) {
-      setError("Please select the project this task belongs to.");
+      setError("Please select a project for this task");
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
+
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        mentor_notes: formData.mentor_notes,
+        submission_url: formData.submission_url,
+        due_date: formData.due_date,
+        week_number: parseInt(formData.week_number) || 1,
+        priority: formData.priority,
+        status: formData.status,
+        estimated_hours: parseFloat(formData.estimated_hours) || 0,
+        actual_hours: parseFloat(formData.actual_hours) || 0,
+        project_id: parseInt(formData.project_id),
+      };
+
       if (editingTask) {
-        await taskService.updateTask(editingTask.id, {
-          title: formData.title,
-          description: formData.description,
-          mentor_notes: formData.mentor_notes,
-          submission_url: formData.submission_url,
-          status: formData.status,
-          priority: formData.priority,
-          week_number: parseInt(formData.week_number),
-          estimated_hours: parseFloat(formData.estimated_hours) || 0,
-          actual_hours: parseFloat(formData.actual_hours) || 0,
-        });
+        await taskService.updateTask(editingTask.id, payload);
       } else {
-        await taskService.createTask({
-          project_id: parseInt(formData.project_id),
-          title: formData.title,
-          description: formData.description,
-          mentor_notes: formData.mentor_notes,
-          submission_url: formData.submission_url,
-          priority: formData.priority,
-          status: formData.status,
-          week_number: parseInt(formData.week_number),
-          estimated_hours: parseFloat(formData.estimated_hours) || 0,
-          actual_hours: parseFloat(formData.actual_hours) || 0,
-        });
+        await taskService.createTask(payload);
       }
+
       setModalOpen(false);
+      setEditingTask(null);
       onRefresh?.();
     } catch (err) {
-      console.error("Failed to save task:", err);
-      setError(err.message || "Failed to save task.");
+      setError(err.message || "Failed to save task deliverable");
     } finally {
       setLoading(false);
     }
@@ -246,8 +270,7 @@ export default function TaskKanban({
       await taskService.updateTask(task.id, { status: newStatus });
       onRefresh?.();
     } catch (err) {
-      console.error("Failed to update status:", err);
-      alert(err.message || "Failed to update task status.");
+      alert(`Failed to update status: ${err.message}`);
     } finally {
       setUpdatingTaskId(null);
     }
@@ -268,71 +291,284 @@ export default function TaskKanban({
     return p ? p.title : `Project #${projectId}`;
   };
 
-  // Filter tasks based on top-right status dropdown
-  const filteredTasks = tasks.filter((t) => {
-    if (statusFilter === "all") return true;
-    return t.status === statusFilter;
+  // Active filters count
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    selectedWeek !== "all" ||
+    selectedPriority !== "all" ||
+    selectedProject !== "all" ||
+    selectedDate !== "";
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setSelectedWeek("all");
+    setSelectedPriority("all");
+    setSelectedProject("all");
+    setSelectedDate("");
+  };
+
+  // Tab counts
+  const allCount = tasks.length;
+  const pendingCount = tasks.filter((t) => t.status === "todo" || t.status === "in_progress").length;
+  const completedCount = tasks.filter((t) => t.status === "done").length;
+
+  // Filtered tasks logic
+  const filteredTasks = tasks.filter((task) => {
+    // 1. Tab filter
+    if (activeTab === "pending" && task.status === "done") return false;
+    if (activeTab === "completed" && task.status !== "done") return false;
+
+    // 2. Search query
+    if (search.trim()) {
+      const term = search.toLowerCase().trim();
+      const title = (task.title || "").toLowerCase();
+      const desc = (task.description || "").toLowerCase();
+      const notes = (task.mentor_notes || "").toLowerCase();
+      const proj = getProjectName(task.project_id).toLowerCase();
+      if (!title.includes(term) && !desc.includes(term) && !notes.includes(term) && !proj.includes(term)) {
+        return false;
+      }
+    }
+
+    // 3. Week filter
+    if (selectedWeek !== "all" && Number(task.week_number) !== Number(selectedWeek)) {
+      return false;
+    }
+
+    // 4. Priority filter
+    if (selectedPriority !== "all" && task.priority !== selectedPriority) {
+      return false;
+    }
+
+    // 5. Project filter
+    if (selectedProject !== "all" && String(task.project_id) !== String(selectedProject)) {
+      return false;
+    }
+
+    // 6. Day / Date filter
+    if (selectedDate && task.due_date && !String(task.due_date).startsWith(selectedDate)) {
+      return false;
+    }
+
+    return true;
   });
 
   return (
     <div className="space-y-5">
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-      {/* List Header & Top-Right Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/90 p-4 rounded-2xl border border-slate-200/90 shadow-xs">
-        <div>
-          <h3 className="text-sm font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-blue-600" />
-            <span>Task Deliverables ({filteredTasks.length})</span>
-          </h3>
-          <p className="text-xs text-slate-500 font-medium">
-            {isIntern
-              ? "Start assigned tasks, submit deliverable notes & links, and log hours"
-              : "Assign deliverables, provide guidance notes, and review intern submissions"}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 self-end sm:self-auto">
-          {/* Top-Right Status Filter */}
-          <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+      {/* ========================================================= */}
+      {/* FILTER & ACTION TOOLBAR (Direct on page layout)           */}
+      {/* ========================================================= */}
+      <div className="space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          
+          {/* Left: 3 Tabs (All, Pending, Completed) */}
+          <div className="h-11 bg-slate-100 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/90 shadow-inner flex-shrink-0">
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`h-full px-4 sm:px-5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                activeTab === "all"
+                  ? "bg-slate-900 text-white shadow-sm shadow-slate-900/20"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
             >
-              <option value="all">All Statuses ({tasks.length})</option>
-              <option value="todo">To Do ({tasks.filter(t => t.status === "todo").length})</option>
-              <option value="in_progress">In Progress ({tasks.filter(t => t.status === "in_progress").length})</option>
-              <option value="done">Completed ({tasks.filter(t => t.status === "done").length})</option>
-            </select>
+              <CheckSquare className="w-3.5 h-3.5" />
+              <span>All ({allCount})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("pending")}
+              className={`h-full px-4 sm:px-5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                activeTab === "pending"
+                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Pending ({pendingCount})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("completed")}
+              className={`h-full px-4 sm:px-5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                activeTab === "completed"
+                  ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Completed ({completedCount})</span>
+            </button>
           </div>
 
-          {allowCreate && (
+          {/* Center: Search Input Bar */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search tasks by title, scope, guidance notes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-11 pl-10 pr-8 text-xs bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium transition-all shadow-xs flex items-center"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Right: Filters Toggle & Assign Task Action */}
+          <div className="flex items-center gap-2.5 flex-shrink-0">
             <button
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`h-11 inline-flex items-center justify-center gap-2 px-4 rounded-2xl text-xs font-extrabold border transition-all shadow-xs whitespace-nowrap ${
+                showFilters || hasActiveFilters
+                  ? "bg-blue-50 text-blue-700 border-blue-300"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>Assign Task</span>
+              <Filter className="w-4 h-4 text-slate-600" />
+              <span>Filters</span>
+              {hasActiveFilters && (
+                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+              )}
             </button>
-          )}
+
+            {allowCreate && (
+              <button
+                onClick={openCreateModal}
+                className="h-11 inline-flex items-center justify-center gap-2 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02] whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Assign Task</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Expandable Advanced Filters Row */}
+        {showFilters && (
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 animate-fadeIn">
+            {/* Week Filter */}
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                Milestone Week
+              </label>
+              <select
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
+              >
+                <option value="all">All Weeks</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((w) => (
+                  <option key={w} value={w}>
+                    Week {w}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Day / Date Filter */}
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                Day / Date Filter
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                />
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate("")}
+                    className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"
+                    title="Clear Date"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Priority Filter */}
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                Priority
+              </label>
+              <select
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
+              >
+                <option value="all">All Priorities</option>
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+                <option value="critical">Critical Priority</option>
+              </select>
+            </div>
+
+            {/* Project Filter */}
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                Project Track
+              </label>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
+              >
+                <option value="all">All Projects</option>
+                {projectsList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset All Filters Button */}
+            {hasActiveFilters && (
+              <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-1">
+                <button
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset All Filters</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Task List View (Clean Vertical List, Not Kanban Columns) */}
+      {/* ========================================================= */}
+      {/* TASK CARDS GRID (White Cards with Colored Border Strokes) */}
+      {/* ========================================================= */}
       {filteredTasks.length === 0 ? (
         <EmptyState
           icon={CheckSquare}
-          title="No tasks match the selected filter"
+          title="No tasks match the selected view"
           description={
-            statusFilter === "all"
-              ? "No tasks have been assigned to this project yet."
-              : `No tasks currently marked as "${statusFilter.replace("_", " ")}".`
+            hasActiveFilters
+              ? "Try adjusting your search query, week, or date filters."
+              : activeTab === "pending"
+              ? "All tasks are completed! Great job."
+              : activeTab === "completed"
+              ? "No completed tasks yet."
+              : "No task deliverables have been assigned yet."
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredTasks.map((task) => {
             const isToDo = task.status === "todo";
             const isInProgress = task.status === "in_progress";
@@ -341,131 +577,146 @@ export default function TaskKanban({
             return (
               <div
                 key={task.id}
-                className={`bg-white rounded-2xl p-5 border shadow-xs transition-all space-y-3 group ${
+                className={`bg-white rounded-3xl p-6 border-[1.5px] shadow-md shadow-slate-200/70 flex flex-col justify-between transition-all group hover:shadow-xl ${
                   isDone
-                    ? "border-emerald-200/80 bg-emerald-50/10"
+                    ? "border-emerald-500 hover:border-emerald-600"
                     : isInProgress
-                    ? "border-blue-200 bg-blue-50/20"
-                    : "border-slate-200/80 hover:border-blue-300"
+                    ? "border-blue-500 hover:border-blue-600"
+                    : "border-blue-400/80 hover:border-blue-500"
                 }`}
               >
-                {/* Task Row Top Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200/60 flex items-center gap-1">
-                      <FolderGit2 className="w-3.5 h-3.5" />
-                      {getProjectName(task.project_id)}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs">
-                      Week {task.week_number}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-lg font-bold text-xs capitalize ${
-                      task.priority === "critical" ? "bg-rose-100 text-rose-800" :
-                      task.priority === "high" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"
-                    }`}>
-                      {task.priority} Priority
-                    </span>
+                {/* Card Top: Badges & Mentor Actions */}
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    {/* Week, Date & Priority Chips */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200/70">
+                        Week {task.week_number}
+                      </span>
+
+                      {task.due_date && (
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200/70 flex items-center gap-1.5">
+                          <Calendar className="w-3 h-3 text-slate-500" />
+                          {formatTaskDate(task.due_date)}
+                        </span>
+                      )}
+
+                      {/* Solid Color Priority Tags */}
+                      <span
+                        className={`px-2.5 py-1 rounded-lg font-black text-xs uppercase tracking-wider ${
+                          task.priority === "critical"
+                            ? "bg-rose-500 text-white"
+                            : task.priority === "high"
+                            ? "bg-amber-500 text-white"
+                            : task.priority === "medium"
+                            ? "bg-blue-500 text-white"
+                            : "bg-slate-700 text-white"
+                        }`}
+                      >
+                        {task.priority}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <StatusBadge status={task.status || "todo"} size="sm" />
+
+                      {(isMentor || isAdmin) && (
+                        <div className="flex items-center opacity-70 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEditModal(task)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                            title="Edit Task"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(task.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <StatusBadge status={task.status || "todo"} size="sm" />
-
-                    {(isMentor || isAdmin) && (
-                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => openEditModal(task)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Task"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(task.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Delete Task"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                  {/* Title & Description */}
+                  <div>
+                    <h4
+                      className="font-extrabold text-base text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors"
+                      title={task.title}
+                    >
+                      {task.title}
+                    </h4>
+                    {task.description && (
+                      <p className="text-xs text-slate-600 mt-1 leading-relaxed line-clamp-2" title={task.description}>
+                        {task.description}
+                      </p>
                     )}
                   </div>
-                </div>
 
-                {/* Task Title & Description */}
-                <div>
-                  <h4 className={`text-sm font-bold text-slate-900 leading-snug ${isDone ? "line-through text-slate-600 decoration-emerald-500" : ""}`}>
-                    {task.title}
-                  </h4>
-                  {task.description && (
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">{task.description}</p>
+                  {/* Mentor Guidance Note Box */}
+                  {task.mentor_notes && (
+                    <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/70 text-xs text-amber-900 flex items-start gap-2">
+                      <MessageSquare className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="line-clamp-2">
+                        <strong className="text-amber-950 font-bold">Mentor: </strong>
+                        <span>{task.mentor_notes}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submission Deliverables Links */}
+                  {(task.submission_url || task.attachment_url || task.submission_notes) && (
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
+                      {task.submission_notes && (
+                        <p className="text-slate-600 italic line-clamp-2">
+                          "{task.submission_notes}"
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-2 pt-0.5">
+                        {task.submission_url && (
+                          <a
+                            href={task.submission_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold text-xs border border-blue-200/70 transition-all"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Code / PR Link</span>
+                          </a>
+                        )}
+                        {task.attachment_url && (
+                          <a
+                            href={task.attachment_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl font-bold text-xs border border-purple-200/70 transition-all"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span>Attached Artifact</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {/* Mentor Guidance Notes Box (if any) */}
-                {task.mentor_notes && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-2">
-                    <MessageSquare className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-amber-950">Mentor Guidance Instructions:</span>
-                      <p className="text-amber-900/90 leading-relaxed mt-0.5">{task.mentor_notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Submitted Deliverables Section (for completed tasks) */}
-                {isDone && (
-                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 space-y-1.5">
-                    {task.submission_notes && (
-                      <div>
-                        <span className="font-bold text-emerald-950">Submitted Notes:</span>
-                        <p className="text-emerald-900/90 leading-relaxed">{task.submission_notes}</p>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-3 pt-1">
-                      {task.submission_url && (
-                        <a
-                          href={task.submission_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 font-bold text-blue-700 hover:underline text-xs"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Code PR / Demo Link</span>
-                        </a>
-                      )}
-                      {task.attachment_url && (
-                        <a
-                          href={task.attachment_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 font-bold text-purple-700 hover:underline text-xs"
-                        >
-                          <Paperclip className="w-3.5 h-3.5" />
-                          <span>View Attached Artifact</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Row Action Footer */}
-                <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      Estimated: {task.estimated_hours || 0}h
-                    </span>
-                    <span className="flex items-center gap-1 text-blue-600 font-bold">
-                      Logged: {task.actual_hours || 0}h
-                    </span>
+                {/* Card Footer: Hours & Primary Action Button */}
+                <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-slate-500">
+                    <span>{task.estimated_hours || 0}h est</span>
+                    <span className="mx-1.5 text-slate-300">•</span>
+                    <strong className="text-slate-800 font-extrabold">{task.actual_hours || 0}h logged</strong>
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <div>
                     {isToDo ? (
                       <button
                         onClick={() => handleQuickStatusChange(task, "in_progress")}
                         disabled={updatingTaskId === task.id}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
                       >
                         <PlayCircle className="w-3.5 h-3.5" />
                         <span>{updatingTaskId === task.id ? "Starting..." : "Start Task"}</span>
@@ -473,13 +724,13 @@ export default function TaskKanban({
                     ) : isInProgress ? (
                       <button
                         onClick={() => openSubmitModal(task)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-emerald-500/20 transition-all"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-emerald-500/20 transition-all hover:scale-[1.02]"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>Submit Deliverable</span>
+                        <span>Submit Work</span>
                       </button>
                     ) : (
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl text-xs font-extrabold">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Completed</span>
                       </span>
@@ -492,199 +743,74 @@ export default function TaskKanban({
         </div>
       )}
 
-      {/* Intern Task Submission Modal */}
-      {submitModalOpen && submittingTask && (
-        <Modal
-          isOpen={submitModalOpen}
-          onClose={() => setSubmitModalOpen(false)}
-          title={`Submit Task: ${submittingTask.title}`}
-          subtitle="Provide submission notes, reference repository/demo links, and upload deliverable files"
-          maxWidth="max-w-md"
-        >
-          <form onSubmit={handleSubmitTaskDeliverable} className="space-y-4">
-            {submittingTask.mentor_notes && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1">
-                <span className="font-bold flex items-center gap-1 text-amber-950">
-                  <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
-                  Mentor Guidance Instructions:
-                </span>
-                <p className="text-amber-900/90 leading-relaxed">{submittingTask.mentor_notes}</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Submission Notes & Implementation Summary *
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={submitForm.submission_notes}
-                onChange={(e) => setSubmitForm({ ...submitForm, submission_notes: e.target.value })}
-                placeholder="Detail what was built, testing performed, API changes, and completion status..."
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Reference / Code PR / Demo URL
-              </label>
-              <input
-                type="url"
-                value={submitForm.submission_url}
-                onChange={(e) => setSubmitForm({ ...submitForm, submission_url: e.target.value })}
-                placeholder="https://github.com/NETSOL/repo/pull/12 or https://demo.netsol.com"
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Actual Logged Hours</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  required
-                  value={submitForm.actual_hours}
-                  onChange={(e) => setSubmitForm({ ...submitForm, actual_hours: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Attachment File</label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="task-file-input"
-                  />
-                  <label
-                    htmlFor="task-file-input"
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 cursor-pointer flex items-center justify-between text-slate-700 font-semibold"
-                  >
-                    <span>{uploading ? "Uploading..." : submitForm.attachment_url ? "File Attached ✓" : "Upload File"}</span>
-                    <UploadCloud className="w-4 h-4 text-slate-500" />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {submitForm.attachment_url && (
-              <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                <Paperclip className="w-3 h-3" />
-                Attached: {submitForm.attachment_url}
-              </p>
-            )}
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setSubmitModalOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || uploading}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-emerald-500/20 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{loading ? "Submitting..." : "Submit Deliverable"}</span>
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* Mentor Task Assignment & Edit Modal */}
+      {/* ========================================================= */}
+      {/* MENTOR / ADMIN TASK ASSIGNMENT / EDIT MODAL               */}
+      {/* ========================================================= */}
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingTask ? "Edit Task Item" : "Assign Task to Engineering Project"}
-        subtitle="Specify project, deliverables, mentor guidance notes, and target milestone week"
-        maxWidth="max-w-md"
+        title={editingTask ? "Edit Task Deliverable" : "Assign New Task Deliverable"}
+        maxWidth="max-w-xl"
       >
-        <form onSubmit={handleSaveTaskByMentor} className="space-y-4">
-          {/* Project Selector */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Select Project *
-              </label>
-              {fetchingProjects && (
-                <span className="text-[10px] text-blue-600 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  Updating...
-                </span>
-              )}
-            </div>
+        <form onSubmit={handleSave} className="space-y-4">
+          {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-            {projectsList.length === 0 && !fetchingProjects ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-2">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span>No Projects Available</span>
-                </div>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  No engineering projects have been created yet. Please create or assign a project first in Projects directory.
-                </p>
-                <Link
-                  to="/projects"
-                  onClick={() => setModalOpen(false)}
-                  className="inline-flex items-center gap-1 font-bold text-blue-700 hover:underline text-[11px]"
-                >
-                  <span>Go to Projects Directory &rarr;</span>
-                </Link>
-              </div>
-            ) : (
-              <select
-                required
-                disabled={Boolean(editingTask)}
-                value={formData.project_id}
-                onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-semibold"
-              >
-                <option value="">Choose Project...</option>
-                {projectsList.map((proj) => (
-                  <option key={proj.id} value={String(proj.id)}>
-                    {proj.title} (Track #{proj.internship_id})
-                  </option>
-                ))}
-              </select>
-            )}
+          {/* Project Track Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Project Track *
+            </label>
+            <select
+              required
+              value={formData.project_id}
+              onChange={(e) => {
+                const projId = e.target.value;
+                const projStart = getProjectStartDate(projId);
+                const autoWeek = calculateWeekFromStartDate(projStart, formData.due_date);
+                setFormData({
+                  ...formData,
+                  project_id: projId,
+                  week_number: autoWeek,
+                });
+              }}
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+            >
+              <option value="" disabled>Select assigned project</option>
+              {projectsList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Task Deliverable Title *
+              Deliverable Title *
             </label>
             <input
               type="text"
               required
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="e.g. Implement JWT authentication and session tokens"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+              placeholder="e.g. Implement user authentication flow"
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Description & Acceptance Criteria</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Description & Deliverable Scope
+            </label>
             <textarea
-              rows={2}
+              rows={3}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Provide engineering specifics, pull request requirements, and scope..."
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+              placeholder="Engineering details, acceptance criteria, and specific deliverables..."
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
             />
           </div>
 
-          {/* Mentor Guidance Notes Field */}
           <div>
             <label className="block text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">
               Mentor Guidance & Instructions (Optional)
@@ -694,17 +820,60 @@ export default function TaskKanban({
               value={formData.mentor_notes}
               onChange={(e) => setFormData({ ...formData, mentor_notes: e.target.value })}
               placeholder="Specific architectural notes, coding guidelines, or resources for the intern..."
-              className="w-full px-3.5 py-2 text-xs bg-amber-50/50 border border-amber-200/80 rounded-xl focus:outline-none focus:border-amber-500 focus:bg-white text-slate-800"
+              className="w-full px-3.5 py-2 text-xs bg-amber-50/50 border border-amber-200/80 rounded-xl focus:outline-none focus:border-amber-500 focus:bg-white text-slate-800 font-medium"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Task Date *
+              </label>
+              <input
+                type="date"
+                required
+                value={formData.due_date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  const projStart = getProjectStartDate(formData.project_id);
+                  const autoWeek = calculateWeekFromStartDate(projStart, newDate);
+                  setFormData({
+                    ...formData,
+                    due_date: newDate,
+                    week_number: autoWeek,
+                  });
+                }}
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Target Week
+              </label>
+              <select
+                value={formData.week_number}
+                onChange={(e) => setFormData({ ...formData, week_number: parseInt(e.target.value) || 1 })}
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((w) => (
+                  <option key={w} value={w}>
+                    Week {w}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Priority
+              </label>
               <select
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -714,40 +883,27 @@ export default function TaskKanban({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Target Week</label>
-              <select
-                value={formData.week_number}
-                onChange={(e) => setFormData({ ...formData, week_number: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-              >
-                {[1, 2, 3, 4, 5, 6].map((w) => (
-                  <option key={w} value={w}>
-                    Week {w} Milestone
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Estimated Hours</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Estimated Hours
+              </label>
               <input
                 type="number"
                 step="0.5"
                 min="0"
                 value={formData.estimated_hours}
                 onChange={(e) => setFormData({ ...formData, estimated_hours: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Status</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Status
+              </label>
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
               >
                 <option value="todo">To Do</option>
                 <option value="in_progress">In Progress</option>
@@ -760,16 +916,126 @@ export default function TaskKanban({
             <button
               type="button"
               onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading || projectsList.length === 0}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors"
+              disabled={loading}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-all flex items-center gap-1.5"
             >
-              {loading ? "Saving..." : editingTask ? "Update Task" : "Assign Task"}
+              {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingTask ? "Save Changes" : "Assign Task"}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* INTERN SUBMIT DELIVERABLE MODAL                           */}
+      {/* ========================================================= */}
+      <Modal
+        isOpen={submitModalOpen}
+        onClose={() => setSubmitModalOpen(false)}
+        title="Submit Task Deliverables"
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleSubmitTaskDeliverable} className="space-y-4">
+          {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
+
+          {submittingTask && (
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <h4 className="text-xs font-bold text-slate-800">{submittingTask.title}</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">{submittingTask.description}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Deliverable Notes & Summary *
+            </label>
+            <textarea
+              required
+              rows={3}
+              value={submitForm.submission_notes}
+              onChange={(e) => setSubmitForm({ ...submitForm, submission_notes: e.target.value })}
+              placeholder="Explain the changes, test results, PR description, or what you built..."
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Pull Request / GitHub / Demo URL
+            </label>
+            <input
+              type="url"
+              value={submitForm.submission_url}
+              onChange={(e) => setSubmitForm({ ...submitForm, submission_url: e.target.value })}
+              placeholder="https://github.com/..."
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Attach Deliverable File / Artifact
+            </label>
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-200">
+                <UploadCloud className="w-4 h-4 text-slate-500" />
+                <span>{uploading ? "Uploading..." : "Choose File"}</span>
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  className="hidden"
+                />
+              </label>
+              {submitForm.attachment_url && (
+                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 truncate max-w-xs">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>File attached</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Actual Hours Spent
+            </label>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              required
+              value={submitForm.actual_hours}
+              onChange={(e) => setSubmitForm({ ...submitForm, actual_hours: e.target.value })}
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setSubmitModalOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || uploading}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+            >
+              {loading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCircle className="w-3.5 h-3.5" />
+              )}
+              <span>Complete & Submit</span>
             </button>
           </div>
         </form>

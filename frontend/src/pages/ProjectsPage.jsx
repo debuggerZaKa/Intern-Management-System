@@ -262,7 +262,7 @@ export default function ProjectsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fadeIn">
+      <div className={`animate-fadeIn ${selectedProject ? "space-y-3.5 -mt-2 sm:-mt-3" : "space-y-6"}`}>
         {actionSuccess && (
           <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
@@ -276,18 +276,20 @@ export default function ProjectsPage() {
           <Loader message="Loading engineering projects & tasks..." />
         ) : selectedProject ? (
           /* ON-PAGE PROJECT TASKS SCREEN */
-          <div className="space-y-6 animate-fadeIn">
-            {/* Top Navigation Back Button */}
-            <div className="flex items-center justify-between">
+          <div className="space-y-3.5 animate-fadeIn">
+            {/* Top Navigation Back Header */}
+            <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSelectedProject(null)}
                   title="Back to All Projects"
-                  className="w-10 h-10 rounded-2xl bg-white border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+                  className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <span className="text-xs font-black text-slate-800">Back to All Projects</span>
+                <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                  Tasks from {selectedProject.title}
+                </h1>
               </div>
 
               {/* Only Mentors can edit project details */}
@@ -318,10 +320,7 @@ export default function ProjectsPage() {
                     <Code2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedProject.title}</h2>
-                      <StatusBadge status={selectedProject.status || "not_started"} size="sm" />
-                    </div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedProject.title}</h2>
                     {(() => {
                       const matchedInternship = internships.find(i => i.id === selectedProject.internship_id);
                       const internName = matchedInternship?.intern?.profile?.full_name || matchedInternship?.intern?.email || `Track #${selectedProject.internship_id}`;
@@ -335,16 +334,21 @@ export default function ProjectsPage() {
                   </div>
                 </div>
 
-                {isIntern && selectedProject.status === "not_started" && (
-                  <button
-                    onClick={(e) => handleUpdateStatus(e, selectedProject, "in_progress")}
-                    disabled={statusUpdatingId === selectedProject.id}
-                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
-                  >
-                    <PlayCircle className="w-4 h-4" />
-                    <span>{statusUpdatingId === selectedProject.id ? "Starting..." : "Start Project"}</span>
-                  </button>
-                )}
+                {/* Top Right: Status Badge & Actions */}
+                <div className="flex items-center gap-2.5 flex-shrink-0 self-start sm:self-auto">
+                  <StatusBadge status={selectedProject.status || "not_started"} size="sm" />
+
+                  {isIntern && selectedProject.status === "not_started" && (
+                    <button
+                      onClick={(e) => handleUpdateStatus(e, selectedProject, "in_progress")}
+                      disabled={statusUpdatingId === selectedProject.id}
+                      className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
+                    >
+                      <PlayCircle className="w-4 h-4" />
+                      <span>{statusUpdatingId === selectedProject.id ? "Starting..." : "Start Project"}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {selectedProject.description && (
@@ -379,18 +383,16 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            {/* Embedded Project Task Kanban Workspace Container */}
-            <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70">
-              <TaskKanban
-                tasks={tasks.filter((t) => t.project_id === selectedProject.id)}
-                projects={[selectedProject]}
-                onRefresh={loadData}
-                allowCreate={isMentor}
-                isIntern={isIntern}
-                isAdmin={isAdmin}
-                isMentor={isMentor}
-              />
-            </div>
+            {/* Embedded Project Task Kanban */}
+            <TaskKanban
+              tasks={tasks.filter((t) => t.project_id === selectedProject.id)}
+              projects={[selectedProject]}
+              onRefresh={loadData}
+              allowCreate={isMentor}
+              isIntern={isIntern}
+              isAdmin={isAdmin}
+              isMentor={isMentor}
+            />
           </div>
         ) : (
           /* ALL PROJECTS GRID VIEW WITH PREMIUM STYLING */

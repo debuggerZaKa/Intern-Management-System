@@ -1,6 +1,16 @@
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import date, datetime
+
+class ProjectInternshipInfo(BaseModel):
+    id: int
+    intern_id: int
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    current_week: int = 1
+    duration_weeks: int = 6
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ProjectBase(BaseModel):
     title: str
@@ -23,5 +33,6 @@ class ProjectResponse(ProjectBase):
     id: int
     internship_id: int
     created_at: Optional[datetime] = None
+    internship: Optional[ProjectInternshipInfo] = None
 
     model_config = ConfigDict(from_attributes=True)

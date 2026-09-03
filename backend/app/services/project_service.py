@@ -48,6 +48,8 @@ def create_project(db: Session, req: ProjectCreate, current_user: User) -> Proje
         internship = db.query(Internship).filter(Internship.id == internship_id).first()
         if not internship:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Internship not found")
+        if internship.status in ["completed", "terminated"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign projects to a completed or terminated internship record.")
         if current_user.role.name == "mentor" and internship.mentor_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign project to an intern not assigned to you")
         if current_user.role.name == "intern" and internship.intern_id != current_user.id:
@@ -72,6 +74,9 @@ def update_project(db: Session, project_id: int, req: ProjectUpdate, current_use
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     
+    if project.internship and project.internship.status in ["completed", "terminated"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot edit projects on a completed internship record.")
+
     # Ownership verification: if intern, must own the internship
     if current_user.role.name == "intern" and project.internship.intern_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit another intern's project")
@@ -89,6 +94,9 @@ def delete_project(db: Session, project_id: int, current_user: User) -> bool:
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     
+    if project.internship and project.internship.status in ["completed", "terminated"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete projects on a completed internship record.")
+
     # Ownership verification
     if current_user.role.name == "intern" and project.internship.intern_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another intern's project")
