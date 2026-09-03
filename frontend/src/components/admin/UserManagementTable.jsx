@@ -19,10 +19,12 @@ import Modal from "../common/Modal";
 import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 import UserAvatar from "../common/UserAvatar";
+import DeleteConfirmModal from "../common/DeleteConfirmModal";
 
 export default function UserManagementTable({
   users = [],
   roles = [],
+  internships = [],
   onRefresh,
   search: externalSearch,
   roleFilter: externalRoleFilter,
@@ -36,6 +38,18 @@ export default function UserManagementTable({
   const [newRoleId, setNewRoleId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // User Delete Confirmation & Blocked Dependency Modal State
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    user: null,
+    isBlocked: false,
+    blockedReason: "",
+    dependencies: [],
+    resolutionText: "",
+    resolutionAction: null,
+    confirmLoading: false,
+  });
 
   const isControlled = externalSearch !== undefined || externalRoleFilter !== undefined;
   const search = isControlled ? (externalSearch || "") : internalSearch;
@@ -112,6 +126,85 @@ export default function UserManagementTable({
       setError(err.message || "Failed to update role.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (u) => {
+    const role = u.role?.name;
+    // Count tracks from the externally-provided internships list (UserResponse schema
+    // does not include relation arrays, so we resolve them from the parent's data).
+    const internTracksCount = internships.filter((i) => i.intern_id === u.id).length;
+    const mentorTracksCount = internships.filter((i) => i.mentor_id === u.id).length;
+
+    // Check if intern has any recorded tracks
+    if (role === "intern" && internTracksCount > 0) {
+      setDeleteModal({
+        isOpen: true,
+        user: u,
+        isBlocked: true,
+        blockedReason: "This intern has recorded internship tracks, submitted reports, and evaluation history.",
+        dependencies: [
+          `${internTracksCount} Internship Track Milestone(s)`,
+          "Submitted Weekly Progress Reports & Deliverables",
+          "Official Academic & Certificate Audit Trail",
+        ],
+        resolutionText: "Permanent deletion is blocked to prevent data corruption. To revoke system access, deactivate or archive this account instead.",
+        resolutionAction: {
+          label: "Deactivate User Instead",
+          onClick: () => handleDeactivate(u.id),
+        },
+        confirmLoading: false,
+      });
+      return;
+    }
+
+    // Check if mentor has assigned interns
+    if (role === "mentor" && mentorTracksCount > 0) {
+      setDeleteModal({
+        isOpen: true,
+        user: u,
+        isBlocked: true,
+        blockedReason: "This mentor has supervisee relationships linked to their profile.",
+        dependencies: [
+          `${mentorTracksCount} Supervised Intern(s) / Historical Mentorship Track(s)`,
+          "Evaluation and Feedback Authorship Logs",
+        ],
+        resolutionText: "Please reassign any active interns to another mentor before attempting to remove this profile.",
+        resolutionAction: {
+          label: "Archive Mentor Account",
+          onClick: () => handleArchive(u.id),
+        },
+        confirmLoading: false,
+      });
+      return;
+    }
+
+    // If new / unenrolled user with no downstream dependencies: allow deletion
+    setDeleteModal({
+      isOpen: true,
+      user: u,
+      isBlocked: false,
+      blockedReason: "",
+      dependencies: [
+        "User Authentication Credentials",
+        "Associated User Profile & Bio Information",
+      ],
+      resolutionText: "",
+      resolutionAction: null,
+      confirmLoading: false,
+    });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteModal.user) return;
+    try {
+      setDeleteModal((prev) => ({ ...prev, confirmLoading: true }));
+      await userService.deleteUser(deleteModal.user.id);
+      setDeleteModal((prev) => ({ ...prev, isOpen: false, user: null, confirmLoading: false }));
+      onRefresh?.();
+    } catch (err) {
+      setDeleteModal((prev) => ({ ...prev, confirmLoading: false }));
+      setError(err.message || "Failed to delete user.");
     }
   };
 
@@ -247,11 +340,20 @@ export default function UserManagementTable({
                           <button
                             onClick={() => handleArchive(u.id)}
                             title="Archive Account"
-                            className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
                           >
                             <Archive className="w-4 h-4" />
                           </button>
                         )}
+
+                        {/* Delete button */}
+                        <button
+                          onClick={() => handleDeleteClick(u)}
+                          title="Delete Account"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -305,6 +407,23 @@ export default function UserManagementTable({
           </div>
         </div>
       </Modal>
+
+      {/* User Deletion Warning / Blocked Dependency Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal((prev) => ({ ...prev, isOpen: false, user: null }))}
+        onConfirm={confirmDeleteUser}
+        title={deleteModal.isBlocked ? "Cannot Delete User" : "Delete User Account"}
+        itemName={deleteModal.user?.profile?.full_name || deleteModal.user?.email}
+        isBlocked={deleteModal.isBlocked}
+        blockedReason={deleteModal.blockedReason}
+        dependencies={deleteModal.dependencies}
+        resolutionText={deleteModal.resolutionText}
+        resolutionAction={deleteModal.resolutionAction}
+        confirmText="Delete Account"
+        confirmLoading={deleteModal.confirmLoading}
+        warningMessage="This user account and all personal profile data will be permanently removed."
+      />
     </div>
   );
 }

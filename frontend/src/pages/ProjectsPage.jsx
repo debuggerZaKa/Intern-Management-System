@@ -37,6 +37,7 @@ import StatCard from "../components/common/StatCard";
 import TaskKanban from "../components/intern/TaskKanban";
 import ProjectCard from "../components/mentor/ProjectCard";
 import ProjectDetailsModal from "../components/common/ProjectDetailsModal";
+import DeleteConfirmModal from "../components/common/DeleteConfirmModal";
 import UserAvatar from "../components/common/UserAvatar";
 import { getMediaUrl } from "../utils/mediaUtils";
 import { getUniqueInternCurrentTracks } from "../utils/internshipUtils";
@@ -50,6 +51,18 @@ export default function ProjectsPage() {
   const [activeInternship, setActiveInternship] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Enhanced Delete Confirmation Modal State
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    project: null,
+    isBlocked: false,
+    blockedReason: "",
+    dependencies: [],
+    resolutionText: "",
+    confirmText: "Delete Project",
+    confirmLoading: false,
+  });
   const [actionSuccess, setActionSuccess] = useState(null);
 
   // Filter States
@@ -274,18 +287,72 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleDeleteProject = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this project? Associated tasks will be detached.")) {
+  const handleDeleteProject = (e, id) => {
+    if (e) e.stopPropagation();
+    const proj = projects.find((p) => p.id === id);
+    if (!proj) return;
+
+    const matchedInternship = internships.find((i) => i.id === proj.internship_id);
+    const isCompleted = matchedInternship && (matchedInternship.status === "completed" || matchedInternship.status === "terminated");
+
+    if (isCompleted) {
+      setDeleteModal({
+        isOpen: true,
+        project: proj,
+        isBlocked: true,
+        blockedReason: "This project is linked to an officially completed or archived internship track.",
+        dependencies: [
+          "Archived Internship Milestone Record",
+          "Official certificate and portfolio deliverables"
+        ],
+        resolutionText: "Historical deliverables on finalized tracks cannot be deleted to preserve academic and audit integrity.",
+        confirmText: "Dismiss",
+        confirmLoading: false,
+      });
       return;
     }
+
+    const linkedTasks = tasks.filter((t) => t.project_id === id);
+    const completedTasks = linkedTasks.filter((t) => t.status === "done").length;
+    const activeTasks = linkedTasks.length - completedTasks;
+
+    const dependencies = [];
+    if (linkedTasks.length > 0) {
+      dependencies.push(
+        `${linkedTasks.length} Associated Sprint Task(s) (${completedTasks} completed, ${activeTasks} in progress)`
+      );
+    }
+    if (proj.image_url) {
+      dependencies.push("Project Cover Media Asset");
+    }
+    if (proj.repo_url) {
+      dependencies.push("Linked GitHub Code Repository Connection");
+    }
+
+    setDeleteModal({
+      isOpen: true,
+      project: proj,
+      isBlocked: false,
+      blockedReason: "",
+      dependencies,
+      resolutionText: "",
+      confirmText: linkedTasks.length > 0 ? `Delete Project & ${linkedTasks.length} Task(s)` : "Delete Project",
+      confirmLoading: false,
+    });
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!deleteModal.project) return;
     try {
-      await projectService.deleteProject(id);
-      if (selectedProject?.id === id) {
+      setDeleteModal((prev) => ({ ...prev, confirmLoading: true }));
+      await projectService.deleteProject(deleteModal.project.id);
+      if (selectedProject?.id === deleteModal.project.id) {
         setSelectedProject(null);
       }
+      setDeleteModal((prev) => ({ ...prev, isOpen: false, project: null, confirmLoading: false }));
       loadData();
     } catch (err) {
+      setDeleteModal((prev) => ({ ...prev, confirmLoading: false }));
       alert(err.message || "Failed to delete project.");
     }
   };
@@ -893,6 +960,22 @@ export default function ProjectsPage() {
             </form>
           </Modal>
         )}
+
+        {/* Universal Delete Confirmation & Warning Modal */}
+        <DeleteConfirmModal
+          isOpen={deleteModal.isOpen}
+          onClose={() => setDeleteModal((prev) => ({ ...prev, isOpen: false, project: null }))}
+          onConfirm={confirmDeleteProject}
+          title={deleteModal.isBlocked ? "Cannot Delete Project" : "Delete Project"}
+          itemName={deleteModal.project?.title}
+          isBlocked={deleteModal.isBlocked}
+          blockedReason={deleteModal.blockedReason}
+          dependencies={deleteModal.dependencies}
+          resolutionText={deleteModal.resolutionText}
+          confirmText={deleteModal.confirmText}
+          confirmLoading={deleteModal.confirmLoading}
+          warningMessage="Deleting this project will permanently remove it along with all associated sprint tasks."
+        />
       </div>
     </AppLayout>
   );

@@ -218,7 +218,7 @@ def _build_individual_context(db: Session, intern: User, week_number: Optional[i
     name = _get_intern_display_name(intern)
     internship = (
         db.query(Internship)
-        .filter(Internship.intern_id == intern.id, Internship.status == "active")
+        .filter(Internship.intern_id == intern.id, Internship.status.in_(["active", "extended"]))
         .first()
     )
 
@@ -338,7 +338,7 @@ def _build_broad_context(db: Session, allowed_intern_ids: List[int], query: str)
                 name = _get_intern_display_name(user) if user else f"Intern #{intern_id}"
                 internship = (
                     db.query(Internship)
-                    .filter(Internship.intern_id == intern_id, Internship.status == "active")
+                    .filter(Internship.intern_id == intern_id, Internship.status.in_(["active", "extended"]))
                     .first()
                 )
                 dept = internship.department if internship else "N/A"

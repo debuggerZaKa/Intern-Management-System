@@ -7,6 +7,7 @@ from app.constants.permissions import PERMISSIONS
 from app.models.user import User
 from app.schemas.report import WeeklyReportCreate, WeeklyReportUpdate, WeeklyReportResponse
 from app.services.report_service import get_reports, get_report_by_id, submit_weekly_report, update_weekly_report
+from app.models.internship import Internship
 
 router = APIRouter(prefix="/reports", tags=["Weekly Reports"])
 
@@ -17,6 +18,23 @@ def read_reports(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERMISSIONS.REPORT.READ))
 ):
+    # Interns may only view their own reports
+    if current_user.role.name == "intern":
+        if not internship_id:
+            own_internships = db.query(Internship.id).filter(Internship.intern_id == current_user.id).all()
+            own_ids = [i.id for i in own_internships]
+            if not own_ids:
+                return []
+            from app.models.report import WeeklyReport
+            query = db.query(WeeklyReport).filter(WeeklyReport.internship_id.in_(own_ids))
+            if week_number:
+                query = query.filter(WeeklyReport.week_number == week_number)
+            return query.order_by(WeeklyReport.week_number.asc()).all()
+        else:
+            # Verify the intern owns this internship
+            internship = db.query(Internship).filter(Internship.id == internship_id, Internship.intern_id == current_user.id).first()
+            if not internship:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you can only view your own reports")
     return get_reports(db, internship_id=internship_id, week_number=week_number)
 
 @router.get("/{report_id}", response_model=WeeklyReportResponse)
@@ -28,6 +46,9 @@ def read_report(
     report = get_report_by_id(db, report_id)
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    # Interns may only view their own reports
+    if current_user.role.name == "intern" and report.internship.intern_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you can only view your own reports")
     return report
 
 @router.post("", response_model=WeeklyReportResponse, status_code=status.HTTP_201_CREATED)

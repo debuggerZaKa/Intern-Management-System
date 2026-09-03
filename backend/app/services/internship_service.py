@@ -17,7 +17,7 @@ def get_internship_by_id(db: Session, internship_id: int) -> Optional[Internship
     return db.query(Internship).filter(Internship.id == internship_id).first()
 
 def get_intern_active_internship(db: Session, intern_id: int) -> Optional[Internship]:
-    return db.query(Internship).filter(Internship.intern_id == intern_id, Internship.status == "active").first()
+    return db.query(Internship).filter(Internship.intern_id == intern_id, Internship.status.in_(["active", "extended"])).first()
 
 def create_internship(db: Session, req: InternshipCreate) -> Internship:
     intern = db.query(User).filter(User.id == req.intern_id).first()

@@ -178,6 +178,43 @@ def delete_user(db: Session, user_id: int) -> bool:
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # 1. Block deleting intern if they have any internship history
+    if user.internships_as_intern and len(user.internships_as_intern) > 0:
+        name = user.profile.full_name if (user.profile and user.profile.full_name) else user.email
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete candidate '{name}': this account is linked to {len(user.internships_as_intern)} internship track(s) and official records. Deactivate or Archive the user instead."
+        )
+
+    # 2. Block deleting mentor if linked to any supervisees, evaluations, or feedback
+    from app.models.internship import Internship
+    from app.models.assignment import MentorInternAssignment
+    from app.models.evaluation import EndOfInternshipEvaluation
+    from app.models.feedback import MentorFeedback
+
+    active_supervisions = db.query(Internship).filter(
+        Internship.mentor_id == user_id,
+        Internship.status.in_(["active", "extended", "waiting_certificate_approval", "pending_certificate_generation"])
+    ).count()
+    if active_supervisions > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete mentor: currently supervising {active_supervisions} active intern(s). Reassign their interns first."
+        )
+
+    has_history = (
+        db.query(MentorInternAssignment).filter(MentorInternAssignment.mentor_id == user_id).count() > 0 or
+        db.query(EndOfInternshipEvaluation).filter(EndOfInternshipEvaluation.mentor_id == user_id).count() > 0 or
+        db.query(MentorFeedback).filter(MentorFeedback.mentor_id == user_id).count() > 0
+    )
+    if has_history:
+        name = user.profile.full_name if (user.profile and user.profile.full_name) else user.email
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete mentor '{name}': this account is author of evaluations, weekly feedback, or supervision records. Deactivate or Archive the user instead to preserve academic integrity."
+        )
+
     db.delete(user)
     db.commit()
     return True

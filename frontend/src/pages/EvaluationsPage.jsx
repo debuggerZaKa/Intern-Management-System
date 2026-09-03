@@ -608,7 +608,9 @@ export default function EvaluationsPage() {
                   </div>
 
                   {/* Bottom Action Buttons Row */}
-                  {(isMentor || isAdmin) && (
+                  {/* For submitting/completing a new evaluation: any mentor or admin can act.
+                      For editing an existing evaluation: only the mentor who submitted it. */}
+                  {(isMentor || isAdmin) && (!evalRecord || evalRecord.mentor_id === user?.id) && (
                     <div className="pt-3 border-t-2 border-slate-100 flex items-center justify-end gap-2">
                       <button
                         onClick={() => setSelectedInternshipForEval(internship)}

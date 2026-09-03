@@ -29,12 +29,12 @@ def create_project(db: Session, req: ProjectCreate, current_user: User) -> Proje
             # Find first active internship for this mentor
             active_internship = db.query(Internship).filter(
                 Internship.mentor_id == current_user.id,
-                Internship.status == "active"
+                Internship.status.in_(["active", "extended"])
             ).first()
         else:
             active_internship = db.query(Internship).filter(
                 Internship.intern_id == current_user.id,
-                Internship.status == "active"
+                Internship.status.in_(["active", "extended"])
             ).first()
 
         if not active_internship:
@@ -102,6 +102,17 @@ def delete_project(db: Session, project_id: int, current_user: User) -> bool:
     if current_user.role.name == "intern" and project.internship.intern_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another intern's project")
     
+    # Clean up uploaded cover file if exists
+    if project.image_url:
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            file_path = os.path.join(base_dir, project.image_url.lstrip("/\\"))
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
     db.delete(project)
     db.commit()
     return True

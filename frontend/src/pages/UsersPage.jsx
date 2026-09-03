@@ -35,6 +35,7 @@ import StatCard from "../components/common/StatCard";
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [internships, setInternships] = useState([]);
   const [signupRequests, setSignupRequests] = useState([]);
   
   // Tab State: 'users' (Current Users) | 'signups' (Pending Approvals)
@@ -59,14 +60,16 @@ export default function UsersPage() {
     try {
       setLoading(true);
       setError(null);
-      const [usersData, rolesData, signupsData] = await Promise.all([
+      const [usersData, rolesData, signupsData, internshipsData] = await Promise.all([
         adminService.getUsers(),
         roleService.getRoles(),
         adminService.getSignupRequests("pending"),
+        internshipService.getInternships(),
       ]);
       setUsers(usersData || []);
       setRoles(rolesData || []);
       setSignupRequests(signupsData || []);
+      setInternships(internshipsData || []);
     } catch (err) {
       console.error("Failed to load users data:", err);
       setError(err.message || "Failed to load user management records.");
@@ -378,6 +381,7 @@ export default function UsersPage() {
             <UserManagementTable
               users={filteredUsers}
               roles={roles}
+              internships={internships}
               onRefresh={loadData}
               search={search}
               roleFilter={roleFilter}

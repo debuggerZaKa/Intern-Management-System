@@ -86,7 +86,7 @@ def create_task(db: Session, req: TaskCreate, current_user: User) -> Task:
     elif current_user.role.name == "intern":
         target_intern_ids = [current_user.id]
     else:
-        first_active = db.query(Internship).filter(Internship.status == "active").first()
+        first_active = db.query(Internship).filter(Internship.status.in_(["active", "extended"])).first()
         target_intern_ids = [first_active.intern_id] if first_active else [current_user.id]
     
     week_num = req.week_number
@@ -169,7 +169,18 @@ def delete_task(db: Session, task_id: int, current_user: User) -> bool:
     # Interns cannot delete tasks assigned by mentors
     if current_user.role.name == "intern":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interns cannot delete mentor-assigned tasks")
-    
+
+    # Clean up attachment file if exists
+    if task.attachment_url:
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            file_path = os.path.join(base_dir, task.attachment_url.lstrip("/\\"))
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
     db.delete(task)
     db.commit()
     return True

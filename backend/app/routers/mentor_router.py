@@ -146,7 +146,7 @@ def get_interns_needing_attention(
     """Get list of assigned interns requiring urgent attention (critical blockers, low ratings, risk flags)."""
     assigned_internships = db.query(Internship).filter(
         Internship.mentor_id == mentor.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).all()
 
     attention_list = []
@@ -203,7 +203,7 @@ def get_available_interns(
     requests_by_intern = {r.intern_id: r for r in requests}
 
     # Get active internships
-    internships = db.query(Internship).filter(Internship.status == "active").all()
+    internships = db.query(Internship).filter(Internship.status.in_(["active", "extended"])).all()
     internships_by_intern = {i.intern_id: i for i in internships}
 
     result = []
@@ -255,7 +255,7 @@ def send_mentorship_request(
     active_internship = db.query(Internship).filter(
         Internship.intern_id == intern.id,
         Internship.mentor_id == mentor.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).first()
     if active_internship:
         raise HTTPException(

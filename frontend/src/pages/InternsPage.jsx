@@ -101,7 +101,7 @@ export default function InternsPage() {
   });
 
   const pendingCertificateInternships = internships.filter((i) => {
-    return i.status !== "completed" && i.end_date && i.end_date <= todayStr;
+    return i.status !== "completed" && i.status !== "terminated" && i.end_date && i.end_date <= todayStr;
   });
 
   const assignedMentorsCount = activeEnrolledInterns.filter((intern) => {

@@ -28,6 +28,12 @@ def read_evaluation(
     evaluation = get_evaluation(db, internship_id)
     if not evaluation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No evaluation found for this internship")
+    
+    # Interns may only view their own evaluation
+    if current_user.role.name == "intern":
+        if evaluation.internship.intern_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you can only view your own evaluation")
+    
     return evaluation
 
 
@@ -63,6 +69,10 @@ def export_evaluation_report(
     internship = db.query(Internship).filter(Internship.id == internship_id).first()
     if not internship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Internship not found")
+    
+    # Interns may only export their own evaluation
+    if current_user.role.name == "intern" and internship.intern_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: you can only view your own evaluation")
 
     evaluation = get_evaluation(db, internship_id)
     intern = internship.intern

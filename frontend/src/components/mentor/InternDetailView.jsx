@@ -57,6 +57,7 @@ import { isTrackOngoing, getUniqueInternCurrentTracks } from "../../utils/intern
 import StatusBadge from "../common/StatusBadge";
 import Modal from "../common/Modal";
 import ProjectDetailsModal from "../common/ProjectDetailsModal";
+import DeleteConfirmModal from "../common/DeleteConfirmModal";
 import UserAvatar from "../common/UserAvatar";
 import Loader from "../common/Loader";
 import EmptyState from "../common/EmptyState";
@@ -110,6 +111,18 @@ export default function InternDetailView({
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectCoverFile, setProjectCoverFile] = useState(null);
   const [projectCoverPreview, setProjectCoverPreview] = useState(null);
+
+  // Project Delete Confirmation Modal
+  const [projectDeleteModal, setProjectDeleteModal] = useState({
+    isOpen: false,
+    project: null,
+    isBlocked: false,
+    blockedReason: "",
+    dependencies: [],
+    resolutionText: "",
+    confirmText: "Delete Project",
+    confirmLoading: false,
+  });
   const [projectFormData, setProjectFormData] = useState({
     title: "",
     description: "",
@@ -322,17 +335,68 @@ export default function InternDetailView({
     setProjectModalOpen(true);
   };
 
-  const handleDeleteProject = async (projectId) => {
-    if (!window.confirm("Are you sure you want to delete this project? All associated sprint tasks will also be deleted.")) {
+  const handleDeleteProject = (projectId) => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (!proj) return;
+
+    if (isCompleted || isReadOnly) {
+      setProjectDeleteModal({
+        isOpen: true,
+        project: proj,
+        isBlocked: true,
+        blockedReason: "This project belongs to an officially completed or read-only internship milestone.",
+        dependencies: [
+          "Archived Track Milestone",
+          "Official certificate evaluation record"
+        ],
+        resolutionText: "Historical deliverables on finalized tracks cannot be removed to preserve academic records.",
+        confirmText: "Dismiss",
+        confirmLoading: false,
+      });
       return;
     }
+
+    const linkedTasks = tasks.filter((t) => t.project_id === projectId);
+    const completedTasks = linkedTasks.filter((t) => t.status === "done").length;
+    const activeTasks = linkedTasks.length - completedTasks;
+
+    const dependencies = [];
+    if (linkedTasks.length > 0) {
+      dependencies.push(
+        `${linkedTasks.length} Sprint Task(s) (${completedTasks} completed, ${activeTasks} in progress)`
+      );
+    }
+    if (proj.image_url) {
+      dependencies.push("Project Cover Media Asset");
+    }
+    if (proj.repo_url) {
+      dependencies.push("Linked GitHub Code Repository Connection");
+    }
+
+    setProjectDeleteModal({
+      isOpen: true,
+      project: proj,
+      isBlocked: false,
+      blockedReason: "",
+      dependencies,
+      resolutionText: "",
+      confirmText: linkedTasks.length > 0 ? `Delete Project & ${linkedTasks.length} Task(s)` : "Delete Project",
+      confirmLoading: false,
+    });
+  };
+
+  const confirmDeleteProjectInDetail = async () => {
+    if (!projectDeleteModal.project) return;
     try {
-      await projectService.deleteProject(projectId);
-      if (selectedDetailProject?.id === projectId) {
+      setProjectDeleteModal((prev) => ({ ...prev, confirmLoading: true }));
+      await projectService.deleteProject(projectDeleteModal.project.id);
+      if (selectedDetailProject?.id === projectDeleteModal.project.id) {
         setSelectedDetailProject(null);
       }
+      setProjectDeleteModal((prev) => ({ ...prev, isOpen: false, project: null, confirmLoading: false }));
       loadInternData();
     } catch (err) {
+      setProjectDeleteModal((prev) => ({ ...prev, confirmLoading: false }));
       alert(`Failed to delete project: ${err.message}`);
     }
   };
@@ -471,6 +535,29 @@ export default function InternDetailView({
   const isViewingPastTrack = isCompleted || (primaryActiveTrack && internship?.id !== primaryActiveTrack.id && !isTrackOngoing(internship?.status));
   const isReadOnly = isAdmin || isViewingPastTrack;
 
+  // Candidate chronological track sequence (Track #1, Track #2...)
+  const chronologicalTracks = [...userAllInternships].sort(
+    (a, b) => (new Date(a.start_date || 0) - new Date(b.start_date || 0)) || ((a.id || 0) - (b.id || 0))
+  );
+  const getTrackNumber = (trackId) => {
+    const idx = chronologicalTracks.findIndex((t) => t.id === trackId);
+    return idx >= 0 ? idx + 1 : trackId;
+  };
+
+  const formatTrackDates = (startDate, endDate) => {
+    if (!startDate) return "Dates pending";
+    try {
+      const s = new Date(startDate);
+      const sStr = s.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      if (!endDate) return `Started ${sStr}`;
+      const e = new Date(endDate);
+      const eStr = e.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return `${sStr} – ${eStr}`;
+    } catch {
+      return `${startDate} – ${endDate || "Ongoing"}`;
+    }
+  };
+
   const completedTasks = tasks.filter((t) => t.status === "done").length;
   const taskRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
   const activeBlockersCount = blockers.filter((b) => b.status !== "resolved").length;
@@ -595,7 +682,7 @@ export default function InternDetailView({
               <Clock className={`w-4 h-4 ${isViewingPastTrack ? "text-white" : "text-blue-600"}`} />
               <span>
                 {isViewingPastTrack
-                  ? `Viewing Track #${internship?.id} (Archived)`
+                  ? `Viewing Track #${getTrackNumber(internship?.id)} (Archived)`
                   : `Track History (${userAllInternships.length})`}
               </span>
               <ChevronDown className="w-3.5 h-3.5 opacity-70" />
@@ -629,13 +716,19 @@ export default function InternDetailView({
             <span>AI Insights</span>
           </button>
 
-          {/* Final Evaluation Button */}
+          {/* Final Evaluation Button — edit only for the submitting mentor, view-only for admin */}
           <button
             onClick={() => setEvaluationModalOpen(true)}
             className="h-10 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] inline-flex items-center gap-2 flex-shrink-0"
           >
             <Award className="w-4 h-4" />
-            <span>{evaluation ? "View Final Evaluation" : "Final Evaluation"}</span>
+            <span>
+              {evaluation
+                ? evaluation.mentor_id === authUser?.id
+                  ? "Edit Evaluation"
+                  : "View Evaluation"
+                : "Final Evaluation"}
+            </span>
           </button>
         </div>
       </div>
@@ -646,7 +739,7 @@ export default function InternDetailView({
           <div className="flex items-center gap-2.5 font-bold text-amber-950">
             <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
             <span>
-              Viewing <strong>Archived Historical Track #{internship?.id}</strong> ({internship?.department || "General"} &bull; {internship?.duration_weeks} Weeks). All deliverables are in <strong>Read-Only</strong> mode.
+              Viewing <strong>Archived Historical Track #{getTrackNumber(internship?.id)}</strong> ({internship?.department || "General"} &bull; {internship?.duration_weeks} Weeks). All deliverables are in <strong>Read-Only</strong> mode.
             </span>
           </div>
           {primaryActiveTrack && primaryActiveTrack.id !== internship?.id && (
@@ -654,7 +747,7 @@ export default function InternDetailView({
               onClick={() => handleSwitchTrack(primaryActiveTrack.id)}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-xs transition-all hover:scale-105 flex-shrink-0 cursor-pointer"
             >
-              Switch to Active Current Track (Track #{primaryActiveTrack.id})
+              Switch to Active Current Track (Track #{getTrackNumber(primaryActiveTrack.id)})
             </button>
           )}
         </div>
@@ -966,6 +1059,7 @@ export default function InternDetailView({
           onClose={() => setEvaluationModalOpen(false)}
           internship={internship}
           existingEvaluation={evaluation}
+          isReadOnly={!!(evaluation && evaluation.mentor_id !== authUser?.id)}
           onSuccess={loadInternData}
         />
       )}
@@ -1261,80 +1355,104 @@ export default function InternDetailView({
       <Modal
         isOpen={trackHistoryModalOpen}
         onClose={() => setTrackHistoryModalOpen(false)}
-        title="Internship Tracks & Historical Milestones"
+        title="Internship Track History"
         size="lg"
       >
-        <div className="space-y-4">
-          <p className="text-xs text-slate-500">
-            This candidate has participated in multiple internship tracks. Select any track to inspect its archived deliverables, projects, Kanban tasks, weekly reports, and final evaluations.
-          </p>
+        <div className="space-y-3 pt-1">
+          {userAllInternships.map((track) => {
+            const isSelected = internship?.id === track.id;
+            const isOngoing = isTrackOngoing(track.status);
+            const trackNum = getTrackNumber(track.id);
+            const mentorName = track.mentor?.profile?.full_name || track.mentor?.email;
 
-          <div className="space-y-3">
-            {userAllInternships.map((track, idx) => {
-              const isSelected = internship?.id === track.id;
-              const isOngoing = isTrackOngoing(track.status);
-
-              return (
-                <div
-                  key={track.id}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    isSelected
-                      ? "bg-blue-50/70 border-blue-500 shadow-xs"
-                      : "bg-white border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="space-y-1.5 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white text-[11px] font-black">
-                        Track #{track.id}
+            return (
+              <div
+                key={track.id}
+                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                  isSelected
+                    ? "bg-blue-50/60 border-blue-500 shadow-sm shadow-blue-500/10 ring-1 ring-blue-500/30"
+                    : "bg-white border-slate-200/90 hover:border-slate-300 hover:bg-slate-50/60 shadow-2xs"
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Track Info */}
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-xl bg-slate-900 text-white text-[11px] font-black tracking-wide">
+                        Track #{trackNum}
                       </span>
-                      <span className="text-sm font-black text-slate-900">
+                      <h4 className="text-sm font-extrabold text-slate-900 truncate">
                         {track.department || "General Engineering"}
+                      </h4>
+                      <StatusBadge status={track.status} size="sm" />
+                    </div>
+
+                    {/* Meta Details */}
+                    <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap font-semibold">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        <span>{formatTrackDates(track.start_date, track.end_date)}</span>
                       </span>
-                      {isOngoing && (
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
-                          Active Current Track
-                        </span>
+                      <span>&bull;</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        <span>{track.duration_weeks || 6} Weeks</span>
+                      </span>
+                      {mentorName && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <UserCheck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                            <span className="text-slate-700">{mentorName}</span>
+                          </span>
+                        </>
                       )}
                     </div>
-
-                    <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap font-medium">
-                      <span>Duration: {track.duration_weeks} Weeks</span>
-                      <span>&bull;</span>
-                      <span>Start: {track.start_date}</span>
-                      <span>&bull;</span>
-                      <span>End: {track.end_date}</span>
-                    </div>
                   </div>
 
+                  {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-center">
-                    <StatusBadge status={track.status} size="sm" />
-                    <button
-                      type="button"
-                      disabled={isSelected}
-                      onClick={() => {
-                        handleSwitchTrack(track.id);
-                        setTrackHistoryModalOpen(false);
-                      }}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                        isSelected
-                          ? "bg-blue-600 text-white shadow-xs opacity-90 cursor-default"
-                          : "bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer"
-                      }`}
-                    >
-                      {isSelected
-                        ? "Currently Viewing"
-                        : isOngoing
-                        ? "Switch to Active Track"
-                        : "View Past Track"}
-                    </button>
+                    {isSelected ? (
+                      <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-100 text-blue-800 text-xs font-black">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                        <span>Viewing Now</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSwitchTrack(track.id);
+                          setTrackHistoryModalOpen(false);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 hover:border-blue-400 rounded-xl text-xs font-black transition-all shadow-2xs hover:scale-[1.02] cursor-pointer"
+                      >
+                        <span>{isOngoing ? "Switch to Active Track" : "View Record"}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </Modal>
+
+      {/* Universal Delete Confirmation & Warning Modal for Projects */}
+      <DeleteConfirmModal
+        isOpen={projectDeleteModal.isOpen}
+        onClose={() => setProjectDeleteModal((prev) => ({ ...prev, isOpen: false, project: null }))}
+        onConfirm={confirmDeleteProjectInDetail}
+        title={projectDeleteModal.isBlocked ? "Cannot Delete Project" : "Delete Project"}
+        itemName={projectDeleteModal.project?.title}
+        isBlocked={projectDeleteModal.isBlocked}
+        blockedReason={projectDeleteModal.blockedReason}
+        dependencies={projectDeleteModal.dependencies}
+        resolutionText={projectDeleteModal.resolutionText}
+        confirmText={projectDeleteModal.confirmText}
+        confirmLoading={projectDeleteModal.confirmLoading}
+        warningMessage="Deleting this project will permanently remove all associated sprint tasks and intern contributions."
+      />
     </div>
   );
 }

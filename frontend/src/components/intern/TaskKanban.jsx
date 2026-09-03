@@ -30,6 +30,7 @@ import { projectService } from "../../services/projectService";
 import { calculateWeekFromStartDate, getTodayDateStr, formatTaskDate } from "../../utils/taskDateUtils";
 import StatusBadge from "../common/StatusBadge";
 import Modal from "../common/Modal";
+import DeleteConfirmModal from "../common/DeleteConfirmModal";
 import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 
@@ -85,9 +86,20 @@ export default function TaskKanban({
 
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [fetchingProjects, setFetchingProjects] = useState(false);
   const [error, setError] = useState(null);
+  const [fetchingProjects, setFetchingProjects] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState(null);
   const [updatingTaskId, setUpdatingTaskId] = useState(null);
+
+  // Delete Task Confirmation Modal
+  const [deleteTaskModal, setDeleteTaskModal] = useState({
+    isOpen: false,
+    task: null,
+    isBlocked: false,
+    blockedReason: "",
+    dependencies: [],
+    confirmLoading: false,
+  });
 
   useEffect(() => {
     if (initialProjects && initialProjects.length > 0) {
@@ -276,12 +288,52 @@ export default function TaskKanban({
     }
   };
 
-  const handleDelete = async (taskId) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
+  const handleDelete = (taskId) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    if (isCompletedTrack) {
+      setDeleteTaskModal({
+        isOpen: true,
+        task,
+        isBlocked: true,
+        blockedReason: "Tasks on finalized or completed internship tracks are archived and cannot be deleted.",
+        dependencies: ["Archived Milestone Deliverable", "Completed Evaluation Record"],
+        confirmLoading: false,
+      });
+      return;
+    }
+
+    const dependencies = [`Current Status: ${task.status.toUpperCase()}`];
+    if (task.estimated_hours > 0) {
+      dependencies.push(`Logged Hours: ${task.actual_hours || 0} / ${task.estimated_hours}h`);
+    }
+    if (task.attachment_url) {
+      dependencies.push("Submitted File Attachment");
+    }
+    if (task.submission_url) {
+      dependencies.push("Deliverable Demo / Pull Request URL");
+    }
+
+    setDeleteTaskModal({
+      isOpen: true,
+      task,
+      isBlocked: false,
+      blockedReason: "",
+      dependencies,
+      confirmLoading: false,
+    });
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!deleteTaskModal.task) return;
     try {
-      await taskService.deleteTask(taskId);
+      setDeleteTaskModal((prev) => ({ ...prev, confirmLoading: true }));
+      await taskService.deleteTask(deleteTaskModal.task.id);
+      setDeleteTaskModal((prev) => ({ ...prev, isOpen: false, task: null, confirmLoading: false }));
       onRefresh?.();
     } catch (err) {
+      setDeleteTaskModal((prev) => ({ ...prev, confirmLoading: false }));
       alert(`Failed to delete task: ${err.message}`);
     }
   };
@@ -1040,6 +1092,21 @@ export default function TaskKanban({
           </div>
         </form>
       </Modal>
+
+      {/* Universal Task Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteTaskModal.isOpen}
+        onClose={() => setDeleteTaskModal((prev) => ({ ...prev, isOpen: false, task: null }))}
+        onConfirm={confirmDeleteTask}
+        title={deleteTaskModal.isBlocked ? "Cannot Delete Task" : "Delete Sprint Task"}
+        itemName={deleteTaskModal.task?.title}
+        isBlocked={deleteTaskModal.isBlocked}
+        blockedReason={deleteTaskModal.blockedReason}
+        dependencies={deleteTaskModal.dependencies}
+        confirmText="Delete Task"
+        confirmLoading={deleteTaskModal.confirmLoading}
+        warningMessage="This sprint task and any intern submissions will be permanently deleted."
+      />
     </div>
   );
 }

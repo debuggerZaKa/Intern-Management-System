@@ -38,7 +38,7 @@ def get_intern_dashboard(
     """View complete intern progress dashboard."""
     internship = db.query(Internship).filter(
         Internship.intern_id == current_user.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).first()
 
     pending_requests_count = db.query(MentorshipRequest).filter(
@@ -155,7 +155,7 @@ def get_own_reports(
     """View weekly reports submitted by current intern."""
     internship = db.query(Internship).filter(
         Internship.intern_id == current_user.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).first()
     if not internship:
         return []
@@ -179,7 +179,7 @@ def get_own_ai_insights(
     """View AI progress insights generated for current intern."""
     internship = db.query(Internship).filter(
         Internship.intern_id == current_user.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).first()
     if not internship:
         return []

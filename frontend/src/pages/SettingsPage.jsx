@@ -34,6 +34,7 @@ import { adminService } from "../services/adminService";
 import { getMediaUrl } from "../utils/mediaUtils";
 import AppLayout from "../components/common/AppLayout";
 import StatusBadge from "../components/common/StatusBadge";
+import DeleteConfirmModal from "../components/common/DeleteConfirmModal";
 import Loader from "../components/common/Loader";
 import ErrorMessage from "../components/common/ErrorMessage";
 
@@ -85,6 +86,16 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Config Delete Confirmation Modal
+  const [deleteConfigModal, setDeleteConfigModal] = useState({
+    isOpen: false,
+    item: null,
+    type: null,
+    title: "",
+    dependencies: [],
+    warningMessage: "",
+  });
 
   const [profileSuccess, setProfileSuccess] = useState(null);
   const [passwordSuccess, setPasswordSuccess] = useState(null);
@@ -217,7 +228,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Department Management (Admin)
+  // Department & Duration Track Management (Admin)
   const handleAddDepartment = () => {
     if (!newDepartment.trim()) return;
     if (platformSettings.departments.includes(newDepartment.trim())) {
@@ -231,37 +242,67 @@ export default function SettingsPage() {
     setNewDepartment("");
   };
 
-  const handleRemoveDepartment = (deptToRemove) => {
-    setPlatformSettings((prev) => ({
-      ...prev,
-      departments: prev.departments.filter((d) => d !== deptToRemove),
-    }));
-  };
-
-  // Duration Track Management (Admin)
   const handleAddDuration = () => {
-    const num = parseInt(newDuration, 10);
-    if (isNaN(num) || num <= 0) {
-      alert("Please enter a valid number of weeks (e.g. 10).");
+    const parsed = parseInt(newDuration, 10);
+    if (!parsed || parsed <= 0) return;
+    if (platformSettings.duration_options.includes(parsed)) {
+      alert("Duration track option already exists.");
       return;
     }
-    if (platformSettings.duration_options.includes(num)) {
-      alert(`${num}-week duration track already exists.`);
-      return;
-    }
-    const updated = [...platformSettings.duration_options, num].sort((a, b) => a - b);
     setPlatformSettings((prev) => ({
       ...prev,
-      duration_options: updated,
+      duration_options: [...prev.duration_options, parsed].sort((a, b) => a - b),
     }));
     setNewDuration("");
   };
 
+  const handleRemoveDepartment = (deptToRemove) => {
+    setDeleteConfigModal({
+      isOpen: true,
+      item: deptToRemove,
+      type: "department",
+      title: "Remove Department",
+      dependencies: [
+        "Department selection for new candidate enrollments",
+        "Assigned department tags on future project creations",
+      ],
+      warningMessage: "Existing interns in this department will keep their record, but new enrollments cannot select it.",
+    });
+  };
+
   const handleRemoveDuration = (numToRemove) => {
-    setPlatformSettings((prev) => ({
-      ...prev,
-      duration_options: prev.duration_options.filter((d) => d !== numToRemove),
-    }));
+    setDeleteConfigModal({
+      isOpen: true,
+      item: numToRemove,
+      type: "duration",
+      title: "Remove Duration Track",
+      dependencies: [
+        `${numToRemove}-week duration option for future internships`,
+      ],
+      warningMessage: "Existing candidates enrolled in this duration will not be affected.",
+    });
+  };
+
+  const confirmDeleteConfig = () => {
+    if (deleteConfigModal.type === "department") {
+      setPlatformSettings((prev) => ({
+        ...prev,
+        departments: prev.departments.filter((d) => d !== deleteConfigModal.item),
+      }));
+    } else if (deleteConfigModal.type === "duration") {
+      setPlatformSettings((prev) => ({
+        ...prev,
+        duration_options: prev.duration_options.filter((d) => d !== deleteConfigModal.item),
+      }));
+    }
+    setDeleteConfigModal({
+      isOpen: false,
+      item: null,
+      type: null,
+      title: "",
+      dependencies: [],
+      warningMessage: "",
+    });
   };
 
   // Platform Settings Save Handler
@@ -939,6 +980,19 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Universal Config Delete Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteConfigModal.isOpen}
+        onClose={() => setDeleteConfigModal((prev) => ({ ...prev, isOpen: false, item: null }))}
+        onConfirm={confirmDeleteConfig}
+        title={deleteConfigModal.title}
+        itemName={deleteConfigModal.type === "duration" ? `${deleteConfigModal.item} Weeks Track` : deleteConfigModal.item}
+        isBlocked={false}
+        dependencies={deleteConfigModal.dependencies}
+        confirmText="Remove Option"
+        warningMessage={deleteConfigModal.warningMessage}
+      />
     </AppLayout>
   );
 }

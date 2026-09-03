@@ -106,8 +106,8 @@ def update_evaluation(db: Session, evaluation_id: int, req: EvaluationUpdate, me
     if not eval_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation record not found")
     
-    if mentor.role.name == "mentor" and eval_record.mentor_id != mentor.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit another mentor's evaluation")
+    if eval_record.mentor_id != mentor.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the mentor who submitted this evaluation can update it")
     
     update_data = req.dict(exclude_unset=True)
     for field, value in update_data.items():

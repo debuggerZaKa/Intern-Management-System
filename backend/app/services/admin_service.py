@@ -24,7 +24,7 @@ def _ensure_active_internship(db: Session, intern_user: User, duration_weeks: Op
     weeks = duration_weeks if (duration_weeks is not None and duration_weeks > 0) else settings.INTERNSHIP_DURATION_WEEKS
     existing = db.query(Internship).filter(
         Internship.intern_id == intern_user.id,
-        Internship.status == "active"
+        Internship.status.in_(["active", "extended"])
     ).first()
     if existing:
         if duration_weeks is not None and duration_weeks > 0 and existing.duration_weeks != duration_weeks:
@@ -234,7 +234,7 @@ def get_system_analytics(db: Session) -> Dict[str, Any]:
     total_users = db.query(User).count()
     active_users = db.query(User).filter(User.is_active == True).count()
 
-    active_internships = db.query(Internship).filter(Internship.status == "active").count()
+    active_internships = db.query(Internship).filter(Internship.status.in_(["active", "extended"])).count()
     completed_internships = db.query(Internship).filter(Internship.status == "completed").count()
 
     total_tasks = db.query(Task).count()

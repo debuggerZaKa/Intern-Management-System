@@ -49,7 +49,7 @@ def assign_mentor(
     if not internship:
         internship = db.query(Internship).filter(
             Internship.intern_id == internship_id,
-            Internship.status == "active"
+            Internship.status.in_(["active", "extended"])
         ).first()
 
     # 3. If still not found, check if target ID is an intern User and initialize active internship

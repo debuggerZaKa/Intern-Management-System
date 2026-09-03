@@ -22,7 +22,7 @@ def submit_weekly_report(db: Session, req: WeeklyReportCreate, current_user: Use
     if not internship_id:
         active_internship = db.query(Internship).filter(
             Internship.intern_id == current_user.id,
-            Internship.status == "active"
+            Internship.status.in_(["active", "extended"])
         ).first()
         if not active_internship:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active internship found")
