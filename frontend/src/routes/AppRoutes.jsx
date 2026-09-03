@@ -17,6 +17,7 @@ import EvaluationsPage from "../pages/EvaluationsPage";
 import SettingsPage from "../pages/SettingsPage";
 import AuditLogsPage from "../pages/AuditLogsPage";
 import ProfilePage from "../pages/ProfilePage";
+import CertificatePage from "../pages/CertificatePage";
 import NotFoundPage from "../pages/NotFoundPage";
 import ProtectedRoute from "../components/common/ProtectedRoute";
 import RoleRoute from "../components/common/RoleRoute";
@@ -147,6 +148,24 @@ export default function AppRoutes() {
       <Route
         path="/profile"
         element={<Navigate to="/settings" replace />}
+      />
+
+      {/* Full-Page Printable Certificate Routes */}
+      <Route
+        path="/certificate/:internshipId"
+        element={
+          <ProtectedRoute>
+            <CertificatePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/certificate"
+        element={
+          <ProtectedRoute>
+            <CertificatePage />
+          </ProtectedRoute>
+        }
       />
 
       {/* 404 Fallback */}

@@ -157,8 +157,9 @@ export default function AlumniPage() {
 
   const handleViewCertificate = (e, item) => {
     e.stopPropagation();
-    setSelectedCertInternship(item);
-    setCertModalOpen(true);
+    if (item?.id) {
+      window.open(`/certificate/${item.id}`, "_blank");
+    }
   };
 
   // ─── Tab color map ────────────────────────────────────────────────────────────

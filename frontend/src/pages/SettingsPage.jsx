@@ -814,65 +814,6 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* AI Assistant Controls */}
-                <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
-                  <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-4 h-4 text-purple-600" />
-                    <h4 className="text-xs font-bold text-slate-900">AI Evaluation Assistant</h4>
-                  </div>
-
-                  <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                    <input
-                      type="checkbox"
-                      checked={platformSettings.ai_enabled}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, ai_enabled: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded-md focus:ring-blue-500"
-                    />
-                    <span className="text-xs font-bold text-slate-800">Enable Automated AI Reviews</span>
-                  </label>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Groq Intelligence Model</label>
-                    <select
-                      value={platformSettings.ai_model}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, ai_model: e.target.value })}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
-                    >
-                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Default)</option>
-                      <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Fast)</option>
-                      <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Email & Alert Thresholds */}
-                <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
-                  <div className="flex items-center gap-2.5">
-                    <Mail className="w-4 h-4 text-amber-600" />
-                    <h4 className="text-xs font-bold text-slate-900">Notification Alerts</h4>
-                  </div>
-
-                  <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                    <input
-                      type="checkbox"
-                      checked={platformSettings.email_notifications_enabled}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, email_notifications_enabled: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded-md focus:ring-blue-500"
-                    />
-                    <span className="text-xs font-bold text-slate-800">Send Status Notification Emails</span>
-                  </label>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Overdue Alert Delay (Hours)</label>
-                    <input
-                      type="number"
-                      value={platformSettings.late_submission_alert_hours}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, late_submission_alert_hours: e.target.value })}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
-                    />
-                  </div>
-                </div>
               </div>
             )}
           </div>

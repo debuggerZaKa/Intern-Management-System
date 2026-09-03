@@ -207,8 +207,9 @@ export default function InternsPage() {
 
   const handleOpenCertModal = (e, internship) => {
     e.stopPropagation();
-    setSelectedCertInternship(internship);
-    setCertModalOpen(true);
+    if (internship?.id) {
+      window.open(`/certificate/${internship.id}`, "_blank");
+    }
   };
 
   return (
@@ -518,34 +519,33 @@ export default function InternsPage() {
                       {/* Column 4: Actions */}
                       <div className="sm:col-span-2 flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         
-                        {/* If in pending approval tab, offer Approve Certificate button */}
+                        {/* Actions for Pending Certificate Approval Tab */}
                         {activeTab === "pending_approval" && (
-                          <button
-                            onClick={(e) => handleApproveCertificate(e, matchedInternship)}
-                            disabled={approvingId === matchedInternship?.id}
-                            title="Approve & Issue Certificate"
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>{approvingId === matchedInternship?.id ? "..." : "Approve"}</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => handleApproveCertificate(e, matchedInternship)}
+                              disabled={approvingId === matchedInternship?.id}
+                              title="Approve & Issue Certificate"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{approvingId === matchedInternship?.id ? "..." : "Approve"}</span>
+                            </button>
+
+                            <button
+                              onClick={(e) => handleOpenCertModal(e, matchedInternship)}
+                              title="Preview Certificate"
+                              className="w-9 h-9 rounded-full bg-white border border-slate-200/80 text-slate-600 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50/50 flex items-center justify-center shadow-xs transition-all"
+                            >
+                              <Award className="w-4 h-4 text-amber-500" />
+                            </button>
+                          </>
                         )}
 
-                        {/* Certificate Preview Button */}
-                        {matchedInternship && (
-                          <button
-                            onClick={(e) => handleOpenCertModal(e, matchedInternship)}
-                            title="View Certificate Template"
-                            className="w-9 h-9 rounded-full bg-white border border-slate-200/80 text-slate-600 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50/50 flex items-center justify-center shadow-xs transition-all"
-                          >
-                            <Award className="w-4 h-4 text-amber-500" />
-                          </button>
-                        )}
-
-                        {/* Inspect Profile Squircle Button */}
+                        {/* Inspect Profile Button */}
                         <button
                           onClick={() => setSelectedInternId(internUser?.id)}
-                          title="Inspect 360° Profile"
+                          title="Inspect Profile"
                           className="w-9 h-9 rounded-full bg-white border border-slate-200/80 text-slate-600 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 flex items-center justify-center shadow-xs transition-all"
                         >
                           <Eye className="w-4 h-4 text-slate-600" />

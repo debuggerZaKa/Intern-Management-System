@@ -13,7 +13,8 @@ import {
   Award,
   Brain,
   BarChart3,
-  Plus
+  Plus,
+  Printer
 } from "lucide-react";
 import { taskService } from "../../services/taskService";
 import { reportService } from "../../services/reportService";
@@ -21,6 +22,7 @@ import { blockerService } from "../../services/blockerService";
 import StatCard from "../common/StatCard";
 import StatusBadge from "../common/StatusBadge";
 import MentorshipRequestsCard from "./MentorshipRequestsCard";
+import CertificateModal from "../admin/CertificateModal";
 
 export default function InternOverview({
   dashboard,
@@ -29,6 +31,7 @@ export default function InternOverview({
   onNavigateToBlockers,
   onAssignmentUpdated,
 }) {
+  const [certModalOpen, setCertModalOpen] = useState(false);
 
   const [tasks, setTasks] = useState([]);
   const [reports, setReports] = useState([]);
@@ -317,10 +320,21 @@ export default function InternOverview({
             </div>
 
             <div className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs text-blue-900 space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                <span>End-of-Internship Certification</span>
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>End-of-Internship Certification</span>
+                </p>
+                {dashboard.status === "completed" && (
+                  <button
+                    onClick={() => window.open(`/certificate/${dashboard.id || ""}`, "_blank")}
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-extrabold text-[11px] shadow-xs hover:scale-105 transition-all"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>View Certificate</span>
+                  </button>
+                )}
+              </div>
               <p className="text-[11px] leading-relaxed text-blue-700">
                 All skills, task deliverables, and report scores are compiled directly into your final appraisal report.
               </p>
@@ -328,6 +342,15 @@ export default function InternOverview({
           </div>
         </div>
       </div>
+
+      {/* Certificate Modal */}
+      {certModalOpen && (
+        <CertificateModal
+          isOpen={certModalOpen}
+          onClose={() => setCertModalOpen(false)}
+          internData={dashboard}
+        />
+      )}
     </div>
   );
 }

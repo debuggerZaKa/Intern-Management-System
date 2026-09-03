@@ -37,8 +37,11 @@ import {
   Trash2,
   X,
   Users,
+  Eye,
 } from "lucide-react";
+import { useAuth } from "../../hooks/useAuth";
 import { mentorService } from "../../services/mentorService";
+import { adminService } from "../../services/adminService";
 import { feedbackService } from "../../services/feedbackService";
 import { evaluationService } from "../../services/evaluationService";
 import { projectService } from "../../services/projectService";
@@ -56,7 +59,10 @@ import FeedbackModal from "./FeedbackModal";
 import EvaluationModal from "./EvaluationModal";
 import TaskKanban from "../intern/TaskKanban";
 
-export default function InternDetailView({ internId, onBack }) {
+export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmin }) {
+  const { isAdmin: authIsAdmin } = useAuth();
+  const isAdmin = propIsAdmin ?? authIsAdmin ?? false;
+
   const [internship, setInternship] = useState(null);
   const [allAssignedInterns, setAllAssignedInterns] = useState([]);
   const [reports, setReports] = useState([]);
@@ -118,12 +124,36 @@ export default function InternDetailView({ internId, onBack }) {
       setLoading(true);
       setError(null);
 
-      const [internshipData, reportsData, tasksData, blockersData, projectsData, assignedInternsData] = await Promise.all([
-        mentorService.getAssignedInternDetails(internId),
-        mentorService.getAssignedInternReports(internId),
-        mentorService.getAssignedInternTasks(internId),
-        mentorService.getAssignedInternBlockers(internId),
-        projectService.getProjects(),
+      // Attempt to fetch full internship details
+      let internshipData = null;
+      try {
+        internshipData = await mentorService.getAssignedInternDetails(internId);
+      } catch (err) {
+        // Fallback for admin or unassigned intern: fetch user directly
+        try {
+          const allUsers = await adminService.getUsers();
+          const targetUser = (allUsers || []).find((u) => u.id === internId);
+          if (targetUser) {
+            internshipData = {
+              id: null,
+              intern_id: targetUser.id,
+              intern: targetUser,
+              department: targetUser.profile?.department || "General Engineering",
+              current_week: 1,
+              duration_weeks: 6,
+              status: "not_started",
+            };
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const [reportsData, tasksData, blockersData, projectsData, assignedInternsData] = await Promise.all([
+        mentorService.getAssignedInternReports(internId).catch(() => []),
+        mentorService.getAssignedInternTasks(internId).catch(() => []),
+        mentorService.getAssignedInternBlockers(internId).catch(() => []),
+        projectService.getProjects().catch(() => []),
         mentorService.getAssignedInterns().catch(() => []),
       ]);
 
@@ -134,7 +164,7 @@ export default function InternDetailView({ internId, onBack }) {
       setBlockers(blockersData || []);
       
       const filteredProjects = (projectsData || []).filter(
-        (p) => p.internship_id === internshipData?.id
+        (p) => internshipData?.id && p.internship_id === internshipData.id
       );
       setProjects(filteredProjects);
 
@@ -259,7 +289,7 @@ export default function InternDetailView({ internId, onBack }) {
     setTaskFormData((prev) => {
       const current = prev.selected_intern_ids || [];
       if (current.includes(id)) {
-        if (current.length === 1) return prev; // At least one intern must be selected
+        if (current.length === 1) return prev;
         return { ...prev, selected_intern_ids: current.filter((x) => x !== id) };
       } else {
         return { ...prev, selected_intern_ids: [...current, id] };
@@ -346,12 +376,12 @@ export default function InternDetailView({ internId, onBack }) {
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            title="Back to Assigned Interns"
+            title="Back to Interns"
             className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <span className="text-xs font-black text-slate-800">Back to Assigned Interns</span>
+          <span className="text-xs font-black text-slate-800">Back to Interns</span>
         </div>
         <ErrorMessage message={error} />
       </div>
@@ -364,6 +394,8 @@ export default function InternDetailView({ internId, onBack }) {
   const progressPercent = Math.min(100, Math.round((currentWeek / duration) * 100));
 
   const isCompleted = internship?.status === "completed" || internship?.status === "terminated";
+  // Admin is purely read-only (record view) even during ongoing internships
+  const isReadOnly = isAdmin || isCompleted;
 
   const completedTasks = tasks.filter((t) => t.status === "done").length;
   const taskRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
@@ -494,8 +526,8 @@ export default function InternDetailView({ internId, onBack }) {
           projects={[selectedDetailProject]}
           internship={internship}
           onRefresh={loadInternData}
-          allowCreate={!isCompleted}
-          isMentor={true}
+          allowCreate={!isReadOnly}
+          isMentor={!isAdmin}
         />
       </div>
     );
@@ -511,7 +543,7 @@ export default function InternDetailView({ internId, onBack }) {
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            title="Back to Assigned Interns"
+            title="Back to Interns"
             className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -522,6 +554,14 @@ export default function InternDetailView({ internId, onBack }) {
         </div>
 
         <div className="flex items-center gap-2.5 flex-shrink-0">
+          {/* Admin Executive Record Badge */}
+          {isAdmin && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 rounded-2xl text-xs font-extrabold">
+              <Eye className="w-3.5 h-3.5 text-blue-600" />
+              <span>Official Record View</span>
+            </span>
+          )}
+
           {/* Export / Print Evaluation */}
           <button
             onClick={() => setPrintModalOpen(true)}
@@ -537,7 +577,7 @@ export default function InternDetailView({ internId, onBack }) {
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
           >
             <Award className="w-3.5 h-3.5" />
-            <span>{evaluation ? "Edit 6-Week Evaluation" : "Finalize 6-Week Evaluation"}</span>
+            <span>{evaluation ? "View 6-Week Evaluation" : isAdmin ? "6-Week Evaluation (Pending)" : "Finalize 6-Week Evaluation"}</span>
           </button>
         </div>
       </div>
@@ -758,7 +798,7 @@ export default function InternDetailView({ internId, onBack }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-black text-base text-slate-900 tracking-tight">Assigned Software Projects</h4>
-            {!isCompleted && (
+            {!isReadOnly && (
               <button
                 onClick={() => setProjectModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
@@ -773,8 +813,8 @@ export default function InternDetailView({ internId, onBack }) {
             <EmptyState
               title="No projects assigned to this intern yet"
               description="Assign an official software engineering project to organize sprints, tasks, and repository deliverables."
-              actionLabel={!isCompleted ? "Assign Project" : undefined}
-              onAction={!isCompleted ? () => setProjectModalOpen(true) : undefined}
+              actionLabel={!isReadOnly ? "Assign Project" : undefined}
+              onAction={!isReadOnly ? () => setProjectModalOpen(true) : undefined}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -900,7 +940,7 @@ export default function InternDetailView({ internId, onBack }) {
             </div>
 
             {/* Assign Task Button */}
-            {projects.length > 0 && !isCompleted && (
+            {projects.length > 0 && !isReadOnly && (
               <button
                 onClick={handleOpenCreateTask}
                 className="h-11 inline-flex items-center justify-center gap-2 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02] whitespace-nowrap flex-shrink-0"
@@ -1054,13 +1094,15 @@ export default function InternDetailView({ internId, onBack }) {
                         <span>{aiSummaryLoadingReportId === report.id ? "Analyzing..." : "AI Summary"}</span>
                       </button>
 
-                      <button
-                        onClick={() => handleOpenFeedback(report)}
-                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Mentor Feedback</span>
-                      </button>
+                      {!isAdmin && (
+                        <button
+                          onClick={() => handleOpenFeedback(report)}
+                          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Mentor Feedback</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1110,12 +1152,16 @@ export default function InternDetailView({ internId, onBack }) {
                 <div key={report.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
                   <div className="flex items-center justify-between font-bold text-slate-800">
                     <span className="font-extrabold">Week {report.week_number} Feedback Log</span>
-                    <button
-                      onClick={() => handleOpenFeedback(report)}
-                      className="text-blue-600 hover:text-blue-700 font-extrabold"
-                    >
-                      Update Feedback
-                    </button>
+                    {!isAdmin ? (
+                      <button
+                        onClick={() => handleOpenFeedback(report)}
+                        className="text-blue-600 hover:text-blue-700 font-extrabold"
+                      >
+                        Update Feedback
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 text-[11px] font-semibold">Recorded</span>
+                    )}
                   </div>
                   <p className="text-slate-600">Review feedback status via the Mentor Feedback modal.</p>
                 </div>
@@ -1254,9 +1300,9 @@ export default function InternDetailView({ internId, onBack }) {
               </div>
             )}
 
-            {/* Mentor Actions (Only editable if internship not completed) */}
+            {/* Actions (Hidden if isReadOnly) */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              {!isCompleted ? (
+              {!isReadOnly ? (
                 <button
                   type="button"
                   onClick={() => handleDeleteTask(selectedTaskDetail.id)}
@@ -1268,7 +1314,7 @@ export default function InternDetailView({ internId, onBack }) {
               ) : <div />}
 
               <div className="flex items-center gap-2">
-                {!isCompleted && (
+                {!isReadOnly && (
                   <button
                     type="button"
                     onClick={() => {
