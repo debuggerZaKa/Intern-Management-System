@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft,
   Calendar,
@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   Brain,
   Github,
-  Printer,
   ExternalLink,
   Code2,
   FolderGit2,
@@ -38,6 +37,9 @@ import {
   X,
   Users,
   Eye,
+  Camera,
+  Upload,
+  Info,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { mentorService } from "../../services/mentorService";
@@ -48,76 +50,78 @@ import { projectService } from "../../services/projectService";
 import { taskService } from "../../services/taskService";
 import { aiService } from "../../services/aiService";
 import { blockerService } from "../../services/blockerService";
-import { calculateWeekFromStartDate, getTodayDateStr, formatTaskDate } from "../../utils/taskDateUtils";
+import { userService } from "../../services/userService";
+import { internshipService } from "../../services/internshipService";
+import { getMediaUrl } from "../../utils/mediaUtils";
+import { isTrackOngoing, getUniqueInternCurrentTracks } from "../../utils/internshipUtils";
 import StatusBadge from "../common/StatusBadge";
-import StatCard from "../common/StatCard";
 import Modal from "../common/Modal";
+import ProjectDetailsModal from "../common/ProjectDetailsModal";
+import UserAvatar from "../common/UserAvatar";
 import Loader from "../common/Loader";
 import EmptyState from "../common/EmptyState";
 import ErrorMessage from "../common/ErrorMessage";
 import FeedbackModal from "./FeedbackModal";
 import EvaluationModal from "./EvaluationModal";
 import TaskKanban from "../intern/TaskKanban";
+import ProjectCard from "./ProjectCard";
+import { ReportsModal, FeedbackLogModal, AIInsightsModal } from "./InternProfileModals";
 
-export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmin }) {
-  const { isAdmin: authIsAdmin } = useAuth();
+export default function InternDetailView({
+  internId,
+  initialTrackId = null,
+  defaultToCompleted = false,
+  onBack,
+  isAdmin: propIsAdmin,
+}) {
+  const { isAdmin: authIsAdmin, user: authUser } = useAuth();
   const isAdmin = propIsAdmin ?? authIsAdmin ?? false;
 
   const [internship, setInternship] = useState(null);
+  const [userAllInternships, setUserAllInternships] = useState([]);
+  const [cohortInternships, setCohortInternships] = useState([]);
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [trackHistoryModalOpen, setTrackHistoryModalOpen] = useState(false);
+  const allProjectsCache = useRef([]);
   const [allAssignedInterns, setAllAssignedInterns] = useState([]);
   const [reports, setReports] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [blockers, setBlockers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [evaluation, setEvaluation] = useState(null);
-  const [activeTab, setActiveTab] = useState("overview"); // overview, projects, tasks, reports, feedback_history, ai_insights
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Selected Project Drilldown (Renders full page view)
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
-
-  // Selected Task Popup Details (for Tasks Tab)
-  const [selectedTaskDetail, setSelectedTaskDetail] = useState(null);
-
-  // Tasks Tab Filter State
-  const [taskTabFilter, setTaskTabFilter] = useState("all"); // all, pending, completed
-  const [taskWeekFilter, setTaskWeekFilter] = useState("all");
-  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [projectDetailsPopupOpen, setProjectDetailsPopupOpen] = useState(false);
 
   // Modals state
+  const [reportsModalOpen, setReportsModalOpen] = useState(false);
+  const [feedbackLogModalOpen, setFeedbackLogModalOpen] = useState(false);
+  const [aiInsightsModalOpen, setAiInsightsModalOpen] = useState(false);
   const [feedbackModalReport, setFeedbackModalReport] = useState(null);
   const [feedbackModalExisting, setFeedbackModalExisting] = useState(null);
   const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+
+  // Project Modal State (Create & Edit)
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [projectSaving, setProjectSaving] = useState(false);
+  const [projectCoverFile, setProjectCoverFile] = useState(null);
+  const [projectCoverPreview, setProjectCoverPreview] = useState(null);
   const [projectFormData, setProjectFormData] = useState({
     title: "",
     description: "",
     technologies: "React, FastAPI, PostgreSQL",
     repo_url: "",
     status: "not_started",
+    internship_ids: [],
   });
-  const [projectSaving, setProjectSaving] = useState(false);
 
-  // Task Create / Edit Modal State (Supports Multi-Intern selection)
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
-  const [taskFormData, setTaskFormData] = useState({
-    title: "",
-    description: "",
-    due_date: getTodayDateStr(),
-    week_number: 1,
-    priority: "medium",
-    estimated_hours: 4,
-    mentor_notes: "",
-    project_id: "",
-    selected_intern_ids: [],
-  });
-  const [taskSaving, setTaskSaving] = useState(false);
-
+  // AI Summary State for Reports
   const [aiSummaryLoadingReportId, setAiSummaryLoadingReportId] = useState(null);
-  const [aiSummaries, setAiSummaries] = useState({}); // { [reportId]: summaryObj }
+  const [aiSummaries, setAiSummaries] = useState({});
 
   const loadInternData = async () => {
     try {
@@ -149,7 +153,8 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
         }
       }
 
-      const [reportsData, tasksData, blockersData, projectsData, assignedInternsData] = await Promise.all([
+      const [allInternshipsData, reportsData, tasksData, blockersData, projectsData, assignedInternsData] = await Promise.all([
+        internshipService.getInternships().catch(() => []),
         mentorService.getAssignedInternReports(internId).catch(() => []),
         mentorService.getAssignedInternTasks(internId).catch(() => []),
         mentorService.getAssignedInternBlockers(internId).catch(() => []),
@@ -157,20 +162,60 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
         mentorService.getAssignedInterns().catch(() => []),
       ]);
 
-      setInternship(internshipData);
+      allProjectsCache.current = projectsData || [];
+
+      // Filter and sort this intern's historical tracks:
+      // Active ongoing track first, followed by completed tracks newest-to-oldest by ID descending
+      const internTracks = (allInternshipsData || []).filter(
+        (i) => i.intern_id === internId || i.intern?.id === internId
+      );
+      const sortedTracks = [...internTracks].sort((a, b) => {
+        const aOngoing = isTrackOngoing(a.status) ? 1 : 0;
+        const bOngoing = isTrackOngoing(b.status) ? 1 : 0;
+        if (aOngoing !== bOngoing) return bOngoing - aOngoing;
+        return (b.id || 0) - (a.id || 0);
+      });
+      setUserAllInternships(sortedTracks);
+
+      let targetTrack = null;
+      if (selectedTrackId != null) {
+        targetTrack = sortedTracks.find((t) => Number(t.id) === Number(selectedTrackId));
+      }
+      if (!targetTrack && initialTrackId != null) {
+        targetTrack = sortedTracks.find((t) => Number(t.id) === Number(initialTrackId));
+      }
+      if (!targetTrack && defaultToCompleted) {
+        targetTrack = sortedTracks.find((t) => t.status === "completed");
+      }
+      if (!targetTrack) {
+        targetTrack = sortedTracks.find((t) => isTrackOngoing(t.status));
+      }
+      if (!targetTrack) {
+        targetTrack = sortedTracks[0] || internshipData;
+      }
+
+      const activeTrack = targetTrack;
+      setInternship(activeTrack);
       setAllAssignedInterns(assignedInternsData || []);
+      setCohortInternships(allInternshipsData || []);
       setReports(reportsData || []);
       setTasks(tasksData || []);
       setBlockers(blockersData || []);
-      
+
       const filteredProjects = (projectsData || []).filter(
-        (p) => internshipData?.id && p.internship_id === internshipData.id
+        (p) => activeTrack?.id && p.internship_id === activeTrack.id
       );
       setProjects(filteredProjects);
 
-      if (internshipData?.id) {
+      // If a project was selected in drilldown, refresh its instance
+      if (selectedDetailProject) {
+        const updatedSelected = filteredProjects.find((p) => p.id === selectedDetailProject.id);
+        if (updatedSelected) setSelectedDetailProject(updatedSelected);
+      }
+
+      if (activeTrack?.id) {
         try {
-          const evalData = await evaluationService.getInternshipEvaluation(internshipData.id);
+          const evalData = await evaluationService.getInternshipEvaluation(activeTrack.id);
           setEvaluation(evalData);
         } catch (e) {
           setEvaluation(null);
@@ -184,11 +229,31 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
     }
   };
 
+  const handleSwitchTrack = (trackId) => {
+    setSelectedTrackId(trackId);
+    const targetTrack = trackId != null
+      ? userAllInternships.find((t) => Number(t.id) === Number(trackId))
+      : (userAllInternships.find((t) => isTrackOngoing(t.status)) || userAllInternships[0]);
+
+    if (targetTrack) {
+      setInternship(targetTrack);
+      const filteredProjects = (allProjectsCache.current || []).filter(
+        (p) => p.internship_id === targetTrack.id
+      );
+      setProjects(filteredProjects);
+      setSelectedDetailProject(null);
+      if (targetTrack.id) {
+        evaluationService.getInternshipEvaluation(targetTrack.id).then(setEvaluation).catch(() => setEvaluation(null));
+      }
+    }
+  };
+
   useEffect(() => {
     if (internId) {
       loadInternData();
     }
-  }, [internId]);
+  }, [internId, initialTrackId]);
+
 
   const handleOpenFeedback = async (report) => {
     setFeedbackModalReport(report);
@@ -213,161 +278,168 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
     }
   };
 
-  const handleCreateProject = async (e) => {
+  const handleOpenCreateProject = () => {
+    setEditingProject(null);
+    setProjectFormData({
+      title: "",
+      description: "",
+      technologies: "React, FastAPI, PostgreSQL",
+      repo_url: "",
+      status: "not_started",
+      internship_ids: internship?.id ? [internship.id] : [],
+    });
+    setProjectCoverFile(null);
+    setProjectCoverPreview(null);
+    setProjectModalOpen(true);
+  };
+
+  const handleOpenEditProject = (proj) => {
+    setEditingProject(proj);
+    const matchingInternshipIds = Array.from(
+      new Set(
+        (allProjectsCache.current || [])
+          .filter((p) => p.title === proj.title && p.internship_id)
+          .map((p) => p.internship_id)
+      )
+    );
+    if (proj.internship_id && !matchingInternshipIds.includes(proj.internship_id)) {
+      matchingInternshipIds.push(proj.internship_id);
+    }
+    if (internship?.id && !matchingInternshipIds.includes(internship.id)) {
+      matchingInternshipIds.push(internship.id);
+    }
+
+    setProjectFormData({
+      title: proj.title || "",
+      description: proj.description || "",
+      technologies: proj.technologies || "React, FastAPI, PostgreSQL",
+      repo_url: proj.repo_url || "",
+      status: proj.status || "in_progress",
+      internship_ids: matchingInternshipIds.length > 0 ? matchingInternshipIds : (internship?.id ? [internship.id] : []),
+    });
+    setProjectCoverFile(null);
+    setProjectCoverPreview(proj.image_url ? getMediaUrl(proj.image_url) : null);
+    setProjectModalOpen(true);
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    if (!window.confirm("Are you sure you want to delete this project? All associated sprint tasks will also be deleted.")) {
+      return;
+    }
+    try {
+      await projectService.deleteProject(projectId);
+      if (selectedDetailProject?.id === projectId) {
+        setSelectedDetailProject(null);
+      }
+      loadInternData();
+    } catch (err) {
+      alert(`Failed to delete project: ${err.message}`);
+    }
+  };
+
+  const handleSaveProject = async (e) => {
     e.preventDefault();
     if (!projectFormData.title.trim()) {
       alert("Project title is required.");
       return;
     }
-    if (!internship?.id) {
-      alert("Internship track ID not found.");
+    if (!projectFormData.internship_ids || projectFormData.internship_ids.length === 0) {
+      alert("Please select at least one intern to assign this project to.");
       return;
     }
 
     try {
       setProjectSaving(true);
-      await projectService.createProject({
-        ...projectFormData,
-        internship_id: internship.id,
-      });
+      const targetIds = projectFormData.internship_ids;
+
+      if (editingProject) {
+        await projectService.updateProject(editingProject.id, {
+          title: projectFormData.title,
+          description: projectFormData.description,
+          technologies: projectFormData.technologies,
+          repo_url: projectFormData.repo_url,
+          status: projectFormData.status,
+        });
+
+        if (projectCoverFile) {
+          try {
+            await projectService.uploadProjectImage(editingProject.id, projectCoverFile);
+          } catch (imgErr) {
+            console.warn("Cover image upload failed:", imgErr);
+          }
+        }
+
+        // For any newly selected internship tracks, create project instances if not present
+        const existingTrackIds = new Set(
+          (allProjectsCache.current || []).filter((p) => p.title === editingProject.title).map((p) => p.internship_id)
+        );
+        for (const trackId of targetIds) {
+          if (!existingTrackIds.has(trackId) && trackId !== editingProject.internship_id) {
+            const newP = await projectService.createProject({
+              title: projectFormData.title,
+              description: projectFormData.description,
+              technologies: projectFormData.technologies,
+              repo_url: projectFormData.repo_url,
+              status: projectFormData.status,
+              internship_id: parseInt(trackId),
+            });
+            if (projectCoverFile && newP?.id) {
+              await projectService.uploadProjectImage(newP.id, projectCoverFile).catch(() => {});
+            }
+          }
+        }
+      } else {
+        for (const trackId of targetIds) {
+          const newProj = await projectService.createProject({
+            title: projectFormData.title,
+            description: projectFormData.description,
+            technologies: projectFormData.technologies,
+            repo_url: projectFormData.repo_url,
+            status: projectFormData.status,
+            internship_id: parseInt(trackId),
+          });
+
+          if (projectCoverFile && newProj?.id) {
+            try {
+              await projectService.uploadProjectImage(newProj.id, projectCoverFile);
+            } catch (imgErr) {
+              console.warn("Project saved but cover upload failed:", imgErr);
+            }
+          }
+        }
+      }
+
       setProjectModalOpen(false);
+      setEditingProject(null);
       setProjectFormData({
         title: "",
         description: "",
         technologies: "React, FastAPI, PostgreSQL",
         repo_url: "",
         status: "not_started",
+        internship_ids: [],
       });
+      setProjectCoverFile(null);
+      setProjectCoverPreview(null);
       loadInternData();
     } catch (err) {
-      console.error("Project creation failed:", err);
-      alert(err.message || "Failed to assign project.");
+      console.error("Save project failed:", err);
+      alert(err.message || "Failed to save project.");
     } finally {
       setProjectSaving(false);
     }
   };
 
-  const handleOpenCreateTask = () => {
-    setEditingTask(null);
-    const today = getTodayDateStr();
-    const internStart = internship?.start_date || (internship?.intern?.created_at ? internship.intern.created_at.slice(0, 10) : today);
-    const autoWeek = calculateWeekFromStartDate(internStart, today);
-
-    const currentInternId = intern?.id || internship?.intern_id;
-
-    setTaskFormData({
-      title: "",
-      description: "",
-      due_date: today,
-      week_number: autoWeek,
-      priority: "medium",
-      estimated_hours: 4,
-      mentor_notes: "",
-      project_id: projects[0]?.id || "",
-      selected_intern_ids: currentInternId ? [currentInternId] : [],
-    });
-    setTaskModalOpen(true);
-  };
-
-  const handleOpenEditTask = (task) => {
-    setEditingTask(task);
-    setTaskFormData({
-      title: task.title || "",
-      description: task.description || "",
-      due_date: task.due_date ? String(task.due_date).slice(0, 10) : getTodayDateStr(),
-      week_number: task.week_number || 1,
-      priority: task.priority || "medium",
-      estimated_hours: task.estimated_hours || 4,
-      mentor_notes: task.mentor_notes || "",
-      project_id: task.project_id || projects[0]?.id || "",
-      selected_intern_ids: task.intern_id ? [task.intern_id] : [],
-    });
-    setTaskModalOpen(true);
-  };
-
-  const handleToggleInternSelection = (id) => {
-    setTaskFormData((prev) => {
-      const current = prev.selected_intern_ids || [];
-      if (current.includes(id)) {
-        if (current.length === 1) return prev;
-        return { ...prev, selected_intern_ids: current.filter((x) => x !== id) };
-      } else {
-        return { ...prev, selected_intern_ids: [...current, id] };
-      }
-    });
-  };
-
-  const handleSaveTask = async (e) => {
-    e.preventDefault();
-    if (!taskFormData.title.trim()) {
-      alert("Task title is required.");
-      return;
+  const handleProjectCoverChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProjectCoverFile(file);
+      setProjectCoverPreview(URL.createObjectURL(file));
     }
-    if (!taskFormData.project_id) {
-      alert("Please select the project this task belongs to.");
-      return;
-    }
-
-    try {
-      setTaskSaving(true);
-      if (editingTask) {
-        await taskService.updateTask(editingTask.id, {
-          title: taskFormData.title,
-          description: taskFormData.description,
-          due_date: taskFormData.due_date || getTodayDateStr(),
-          week_number: parseInt(taskFormData.week_number) || 1,
-          priority: taskFormData.priority,
-          estimated_hours: parseFloat(taskFormData.estimated_hours) || 0,
-          mentor_notes: taskFormData.mentor_notes,
-          project_id: parseInt(taskFormData.project_id),
-        });
-      } else {
-        await taskService.createTask({
-          title: taskFormData.title,
-          description: taskFormData.description,
-          due_date: taskFormData.due_date || getTodayDateStr(),
-          week_number: parseInt(taskFormData.week_number) || 1,
-          priority: taskFormData.priority,
-          estimated_hours: parseFloat(taskFormData.estimated_hours) || 0,
-          mentor_notes: taskFormData.mentor_notes,
-          project_id: parseInt(taskFormData.project_id),
-          intern_ids: taskFormData.selected_intern_ids.length > 0 ? taskFormData.selected_intern_ids : undefined,
-          status: "todo",
-        });
-      }
-      setTaskModalOpen(false);
-      setSelectedTaskDetail(null);
-      loadInternData();
-    } catch (err) {
-      console.error("Task save failed:", err);
-      alert(err.message || "Failed to save task.");
-    } finally {
-      setTaskSaving(false);
-    }
-  };
-
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
-    try {
-      await taskService.deleteTask(taskId);
-      setSelectedTaskDetail(null);
-      loadInternData();
-    } catch (err) {
-      alert(`Failed to delete task: ${err.message}`);
-    }
-  };
-
-  const handleTriggerPrint = () => {
-    window.print();
-  };
-
-  const getProjectName = (projectId) => {
-    const p = projects.find((proj) => proj.id === projectId);
-    return p ? p.title : `Project #${projectId}`;
   };
 
   if (loading) {
-    return <Loader message="Loading intern records & submissions..." />;
+    return <Loader message="Loading intern records & project cards..." />;
   }
 
   if (error) {
@@ -389,16 +461,19 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
   }
 
   const intern = internship?.intern;
+  const mentor = internship?.mentor || authUser;
   const currentWeek = internship?.current_week || 1;
   const duration = internship?.duration_weeks || 6;
   const progressPercent = Math.min(100, Math.round((currentWeek / duration) * 100));
 
   const isCompleted = internship?.status === "completed" || internship?.status === "terminated";
-  // Admin is purely read-only (record view) even during ongoing internships
-  const isReadOnly = isAdmin || isCompleted;
+  const primaryActiveTrack = userAllInternships.find((t) => isTrackOngoing(t.status));
+  const isViewingPastTrack = isCompleted || (primaryActiveTrack && internship?.id !== primaryActiveTrack.id && !isTrackOngoing(internship?.status));
+  const isReadOnly = isAdmin || isViewingPastTrack;
 
   const completedTasks = tasks.filter((t) => t.status === "done").length;
   const taskRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+  const activeBlockersCount = blockers.filter((b) => b.status !== "resolved").length;
 
   // Skills tag list from reports
   const allSkills = new Set();
@@ -411,112 +486,52 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
     }
   });
 
-  // Filtered Tasks for Tab 3 (Tasks Tab)
-  const filteredTasks = tasks.filter((task) => {
-    if (taskTabFilter === "pending" && task.status === "done") return false;
-    if (taskTabFilter === "completed" && task.status !== "done") return false;
-
-    if (taskWeekFilter !== "all" && Number(task.week_number) !== Number(taskWeekFilter)) {
-      return false;
-    }
-
-    if (taskSearchQuery.trim()) {
-      const q = taskSearchQuery.toLowerCase().trim();
-      const title = (task.title || "").toLowerCase();
-      const desc = (task.description || "").toLowerCase();
-      const proj = getProjectName(task.project_id).toLowerCase();
-      if (!title.includes(q) && !desc.includes(q) && !proj.includes(q)) return false;
-    }
-
-    return true;
-  });
-
-  // Group tasks by week
-  const groupedTasksByWeek = {};
-  filteredTasks.forEach((task) => {
-    const w = task.week_number || 1;
-    if (!groupedTasksByWeek[w]) groupedTasksByWeek[w] = [];
-    groupedTasksByWeek[w].push(task);
-  });
-  const sortedWeeks = Object.keys(groupedTasksByWeek).map(Number).sort((a, b) => a - b);
+  const internAvatarUrl = intern?.profile?.avatar_url
+    ? getMediaUrl(intern?.profile?.avatar_url)
+    : null;
 
   // =========================================================================
-  // 1. DEDICATED FULL-PAGE VIEW FOR SELECTED PROJECT
+  // 1. DEDICATED FULL-PAGE VIEW FOR SELECTED PROJECT (TASKS PAGE)
   // =========================================================================
   if (selectedDetailProject) {
+    const selectedProjectCover = selectedDetailProject.image_url
+      ? getMediaUrl(selectedDetailProject.image_url)
+      : null;
+
     return (
       <div className="space-y-4 -mt-2 sm:-mt-3 animate-fadeIn">
         {/* Top Header Navigation */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 pb-1">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSelectedDetailProject(null)}
-              title="Back to Intern Profile"
-              className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+              title="Back to Intern Profile & Projects"
+              className="w-10 h-10 rounded-2xl bg-white border-2 border-slate-300 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0 cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight">
-              Tasks from {selectedDetailProject.title}
-            </h1>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                {selectedDetailProject.title}
+              </h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="px-3.5 py-1.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-700 flex items-center gap-1.5 shadow-xs">
+            <span className="h-10 px-3.5 rounded-2xl bg-slate-100 border-2 border-slate-200 text-xs font-extrabold text-slate-700 hidden sm:inline-flex items-center gap-1.5 shadow-xs">
               <UserCheck className="w-4 h-4 text-blue-600" />
               <span>Intern: {intern?.profile?.full_name || intern?.email}</span>
             </span>
-          </div>
-        </div>
 
-        {/* Project Overview Card Banner */}
-        <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0">
-                <Code2 className="w-7 h-7" />
-              </div>
-              <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                  {selectedDetailProject.title}
-                </h2>
-                <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                  {selectedDetailProject.description || "No project scope description provided."}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 flex-shrink-0 self-start sm:self-auto">
-              <StatusBadge status={selectedDetailProject.status || "not_started"} size="sm" />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-            {selectedDetailProject.technologies ? (
-              <div className="flex flex-wrap gap-1.5">
-                {selectedDetailProject.technologies.split(",").map((tech, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200/70"
-                  >
-                    {tech.trim()}
-                  </span>
-                ))}
-              </div>
-            ) : <div />}
-
-            {selectedDetailProject.repo_url && (
-              <a
-                href={selectedDetailProject.repo_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-extrabold text-blue-600 hover:underline"
-              >
-                <Github className="w-4 h-4" />
-                <span>Code Repository</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
+            {/* Info Icon Button on Top Right (Same row as Back button) */}
+            <button
+              type="button"
+              onClick={() => setProjectDetailsPopupOpen(true)}
+              title="View Project Specifications & Details"
+              className="w-10 h-10 rounded-2xl bg-white border-2 border-slate-300 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0 cursor-pointer"
+            >
+              <Info className="w-5 h-5 text-blue-600" />
+            </button>
           </div>
         </div>
 
@@ -529,279 +544,337 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
           allowCreate={!isReadOnly}
           isMentor={!isAdmin}
         />
+
+        {/* Project Details Popup Modal with Members */}
+        <ProjectDetailsModal
+          isOpen={projectDetailsPopupOpen}
+          onClose={() => setProjectDetailsPopupOpen(false)}
+          project={selectedDetailProject}
+          tasks={tasks}
+          intern={intern}
+          mentor={mentor}
+        />
       </div>
     );
   }
 
   // =========================================================================
-  // 2. MAIN INTERN 360 PROFILE VIEW
+  // 2. MAIN SPLIT SCREEN: LEFT (PROFILE & OVERVIEW) | RIGHT (PROJECT CARDS)
   // =========================================================================
   return (
     <div className="space-y-4 -mt-2 sm:-mt-3 animate-fadeIn">
-      {/* Top Navigation Back Header */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            title="Back to Interns"
-            className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+            title="Back to Interns Directory"
+            className="w-10 h-10 rounded-2xl bg-white border-2 border-slate-300 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight">
-            Intern Profile: {intern?.profile?.full_name || intern?.email}
-          </h1>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
+              {intern?.profile?.full_name || intern?.email}
+            </h1>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          {/* Admin Executive Record Badge */}
-          {isAdmin && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 rounded-2xl text-xs font-extrabold">
-              <Eye className="w-3.5 h-3.5 text-blue-600" />
-              <span>Official Record View</span>
-            </span>
+        {/* Top Header Action Buttons */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Internship Track Switcher Button (shown if intern has past/multiple tracks) */}
+          {userAllInternships.length > 1 && (
+            <button
+              onClick={() => setTrackHistoryModalOpen(true)}
+              className={`h-10 px-4 rounded-2xl text-xs font-black transition-all shadow-xs inline-flex items-center gap-2 hover:scale-[1.02] flex-shrink-0 border-2 cursor-pointer ${
+                isViewingPastTrack
+                  ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600"
+                  : "bg-white hover:bg-slate-50 text-slate-800 border-slate-300 hover:border-blue-400"
+              }`}
+            >
+              <Clock className={`w-4 h-4 ${isViewingPastTrack ? "text-white" : "text-blue-600"}`} />
+              <span>
+                {isViewingPastTrack
+                  ? `Viewing Track #${internship?.id} (Archived)`
+                  : `Track History (${userAllInternships.length})`}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+            </button>
           )}
 
-          {/* Export / Print Evaluation */}
+          {/* Weekly Reports Button */}
           <button
-            onClick={() => setPrintModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-extrabold transition-all shadow-xs"
+            onClick={() => setReportsModalOpen(true)}
+            className="h-10 px-4 bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-300 rounded-2xl text-xs font-black transition-all shadow-xs hover:border-blue-400 inline-flex items-center gap-2 hover:scale-[1.02] flex-shrink-0"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Export PDF Report</span>
-          </button>
-
-          {/* 6-Week Evaluation Action */}
-          <button
-            onClick={() => setEvaluationModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>{evaluation ? "View 6-Week Evaluation" : isAdmin ? "6-Week Evaluation (Pending)" : "Finalize 6-Week Evaluation"}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Completed Track Archived Notification Banner */}
-      {isCompleted && (
-        <div className="p-4 rounded-2xl bg-slate-100 border border-slate-300/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-center gap-2.5 font-bold text-slate-800">
-            <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-            <span>This internship track is <strong>{internship.status.replace(/_/g, " ")}</strong>. All deliverables, milestones, and evaluations are archived as official immutable records.</span>
-          </div>
-          <span className="px-3 py-1 bg-slate-200 text-slate-800 rounded-xl font-extrabold text-[11px] uppercase tracking-wider flex-shrink-0">
-            Read Only Record
-          </span>
-        </div>
-      )}
-
-      {/* Structured Profile Overview Card Banner */}
-      <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black text-xl flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0">
-              {intern?.profile?.full_name?.slice(0, 2) || "IN"}
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                {intern?.profile?.full_name || intern?.email}
-              </h2>
-              <p className="text-xs text-slate-500 font-semibold mt-0.5 flex items-center gap-1.5">
-                <GraduationCap className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                <span>{intern?.profile?.university || "University"} &bull; {intern?.profile?.degree || "Degree"} ({intern?.profile?.semester || "Semester"})</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Top Right: Status Badge */}
-          <div className="flex items-center gap-2.5 flex-shrink-0 self-start sm:self-auto">
-            <StatusBadge status={internship?.status || "active"} size="sm" />
-          </div>
-        </div>
-
-        {/* Structured Info Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-          {/* Email Card */}
-          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
-            <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 shadow-xs">
-              <Mail className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Email Address</p>
-              <p className="font-extrabold text-slate-800 truncate text-xs mt-0.5" title={intern?.email}>{intern?.email || "—"}</p>
-            </div>
-          </div>
-
-          {/* Phone Card */}
-          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 shadow-xs">
-              <Phone className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Phone Number</p>
-              <p className="font-extrabold text-slate-800 truncate text-xs mt-0.5">{intern?.profile?.phone || "No phone listed"}</p>
-            </div>
-          </div>
-
-          {/* Department Track Card */}
-          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center flex-shrink-0 shadow-xs">
-              <Layers className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Engineering Track</p>
-              <p className="font-extrabold text-slate-800 truncate text-xs mt-0.5">{internship?.department || "General Engineering"}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Centered Segmented Pill Tabs Bar (Generous Button Widths) */}
-      <div className="flex justify-center w-full py-1">
-        <div className="inline-flex items-center gap-1.5 h-12 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/90 shadow-inner overflow-x-auto max-w-full">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "overview"
-                ? "bg-slate-900 text-white shadow-sm shadow-slate-900/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <Brain className="w-3.5 h-3.5" />
-            <span>Overview</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("projects")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "projects"
-                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <FolderGit2 className="w-3.5 h-3.5" />
-            <span>Projects ({projects.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("tasks")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "tasks"
-                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span>Tasks ({tasks.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("reports")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "reports"
-                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
+            <FileText className="w-4 h-4 text-blue-600" />
             <span>Weekly Reports ({reports.length})</span>
           </button>
 
+          {/* Feedback Log Button */}
           <button
-            onClick={() => setActiveTab("feedback_history")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "feedback_history"
-                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
+            onClick={() => setFeedbackLogModalOpen(true)}
+            className="h-10 px-4 bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-300 rounded-2xl text-xs font-black transition-all shadow-xs hover:border-blue-400 inline-flex items-center gap-2 hover:scale-[1.02] flex-shrink-0"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
+            <MessageSquare className="w-4 h-4 text-indigo-600" />
             <span>Feedback Log</span>
           </button>
 
+          {/* AI Insights Button */}
           <button
-            onClick={() => setActiveTab("ai_insights")}
-            className={`px-5 sm:px-6 h-full rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "ai_insights"
-                ? "bg-purple-600 text-white shadow-sm shadow-purple-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
+            onClick={() => setAiInsightsModalOpen(true)}
+            className="h-10 px-4 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 text-purple-800 border-2 border-purple-300/80 rounded-2xl text-xs font-black transition-all shadow-xs inline-flex items-center gap-2 hover:scale-[1.02] flex-shrink-0"
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-4 h-4 text-purple-600" />
             <span>AI Insights</span>
+          </button>
+
+          {/* Final Evaluation Button */}
+          <button
+            onClick={() => setEvaluationModalOpen(true)}
+            className="h-10 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] inline-flex items-center gap-2 flex-shrink-0"
+          >
+            <Award className="w-4 h-4" />
+            <span>{evaluation ? "View Final Evaluation" : "Final Evaluation"}</span>
           </button>
         </div>
       </div>
 
-      {/* ========================================================= */}
-      {/* TAB 1: OVERVIEW METRICS & SKILLS                          */}
-      {/* ========================================================= */}
-      {activeTab === "overview" && (
-        <div className="space-y-4">
-          {/* Top Colored Metric Analytics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title="Milestone Progress"
-              value={`Week ${currentWeek} of ${duration}`}
-              subtitle={`${progressPercent}% of 6-week internship elapsed`}
-              icon={Clock}
-              color="blue"
-            />
-            <StatCard
-              title="Tasks Completed"
-              value={`${completedTasks} / ${tasks.length}`}
-              subtitle={`${taskRate}% deliverable completion rate`}
-              icon={CheckSquare}
-              color="emerald"
-            />
-            <StatCard
-              title="Reports Submitted"
-              value={`${reports.length} / ${duration}`}
-              subtitle="Weekly milestone submissions"
-              icon={FileText}
-              color="indigo"
-            />
-            <StatCard
-              title="Active Blockers"
-              value={blockers.filter((b) => b.status !== "resolved").length}
-              subtitle="Roadblocks requiring mentor unblocking"
-              icon={AlertCircle}
-              color="rose"
-            />
+      {/* Archived Historical Track Notice Banner */}
+      {isViewingPastTrack && (
+        <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2.5 font-bold text-amber-950">
+            <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <span>
+              Viewing <strong>Archived Historical Track #{internship?.id}</strong> ({internship?.department || "General"} &bull; {internship?.duration_weeks} Weeks). All deliverables are in <strong>Read-Only</strong> mode.
+            </span>
           </div>
-
-          {/* Skills Tag Cloud */}
-          <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-3">
-            <h4 className="font-extrabold text-sm text-slate-900">Demonstrated Engineering Competencies</h4>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {allSkills.size === 0 ? (
-                <p className="text-xs text-slate-400 italic">No skills tagged in submitted weekly reports yet.</p>
-              ) : (
-                Array.from(allSkills).map((skill, idx) => (
-                  <span
-                    key={idx}
-                    className="px-3.5 py-1.5 bg-slate-100 text-slate-800 font-bold text-xs rounded-xl border border-slate-200"
-                  >
-                    {skill}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
+          {primaryActiveTrack && primaryActiveTrack.id !== internship?.id && (
+            <button
+              onClick={() => handleSwitchTrack(primaryActiveTrack.id)}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-xs transition-all hover:scale-105 flex-shrink-0 cursor-pointer"
+            >
+              Switch to Active Current Track (Track #{primaryActiveTrack.id})
+            </button>
+          )}
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* TAB 2: PROJECTS DIRECTORY (Clicking opens Full-Page View)  */}
-      {/* ========================================================= */}
-      {activeTab === "projects" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-black text-base text-slate-900 tracking-tight">Assigned Software Projects</h4>
+      {/* Main 2-Column Split Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        
+        {/* ========================================================= */}
+        {/* LEFT COLUMN: Profile, Details, and Overview Component     */}
+        {/* ========================================================= */}
+        <div className="lg:col-span-4 xl:col-span-4 space-y-4">
+          
+          {/* Intern Profile Card */}
+          <div className="bg-white rounded-3xl p-6 border-2 border-slate-300 shadow-md shadow-slate-200/50 space-y-5">
+            {/* Top Profile Header */}
+            <div className="flex flex-col items-center text-center space-y-3">
+              {/* Profile Photo Display */}
+              <div>
+                {internAvatarUrl ? (
+                  <img
+                    src={internAvatarUrl}
+                    alt={intern?.profile?.full_name || "Intern"}
+                    className="w-24 h-24 rounded-3xl object-cover border-2 border-white shadow-xl shadow-blue-500/15"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center shadow-xl shadow-blue-500/15">
+                    {intern?.profile?.full_name?.slice(0, 2).toUpperCase() || "IN"}
+                  </div>
+                )}
+              </div>
+
+              {/* Name & Academic Meta */}
+              <div>
+                <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                  {intern?.profile?.full_name || intern?.email}
+                </h2>
+                <p className="text-xs text-slate-500 font-semibold mt-1 flex items-center justify-center gap-1">
+                  <GraduationCap className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <span>
+                    {intern?.profile?.university || "University"} &bull; {intern?.profile?.degree || "Degree"}
+                  </span>
+                </p>
+                {intern?.profile?.semester && (
+                  <p className="text-[11px] text-slate-400 font-bold mt-0.5">
+                    Semester: {intern.profile.semester}
+                  </p>
+                )}
+              </div>
+
+              {/* Status Badge */}
+              <div>
+                <StatusBadge status={internship?.status || "active"} size="sm" />
+              </div>
+            </div>
+
+            {/* Contact & Track Info */}
+            <div className="space-y-2.5 pt-3 border-t-2 border-slate-100 text-xs">
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Email</span>
+                  <p className="font-extrabold text-slate-800 truncate text-xs" title={intern?.email}>
+                    {intern?.email || "—"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <Phone className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Phone</span>
+                  <p className="font-extrabold text-slate-800 truncate text-xs">
+                    {intern?.profile?.phone || "No phone listed"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Track / Department</span>
+                  <p className="font-extrabold text-slate-800 truncate text-xs">
+                    {internship?.department || "General Engineering"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bio if available */}
+            {intern?.profile?.bio && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border-2 border-slate-200 text-xs">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Candidate Bio
+                </span>
+                <p className="text-slate-600 font-medium leading-relaxed italic">
+                  "{intern.profile.bio}"
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Overview & Analytics Stats Component */}
+          <div className="bg-white rounded-3xl p-6 border-2 border-slate-300 shadow-md shadow-slate-200/50 space-y-4">
+            <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+              <Brain className="w-4 h-4 text-blue-600" />
+              <span>Internship Track Overview</span>
+            </h3>
+
+            {/* Milestone Progress Bar */}
+            <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs font-black">
+                <span className="text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Milestone Duration</span>
+                </span>
+                <span className="text-blue-600">
+                  Week {currentWeek} of {duration} ({progressPercent}%)
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                  Tasks Done
+                </span>
+                <p className="text-base font-black text-slate-900">
+                  {completedTasks} / {tasks.length}
+                </p>
+                <p className="text-[11px] font-bold text-emerald-600">
+                  {taskRate}% rate
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                  Reports
+                </span>
+                <p className="text-base font-black text-slate-900">
+                  {reports.length} / {duration}
+                </p>
+                <p className="text-[11px] font-bold text-blue-600">
+                  Submissions
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-1 col-span-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                      Blockers
+                    </span>
+                    <p className="text-sm font-black text-slate-900 mt-0.5">
+                      {activeBlockersCount} Active Roadblocks
+                    </p>
+                  </div>
+                  <AlertCircle
+                    className={`w-5 h-5 ${
+                      activeBlockersCount > 0 ? "text-rose-500" : "text-emerald-500"
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Demonstrated Skills Tag Cloud */}
+            <div className="pt-3 border-t-2 border-slate-100 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                Demonstrated Engineering Skills
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {allSkills.size === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No skills tagged in submitted weekly reports yet.</p>
+                ) : (
+                  Array.from(allSkills).map((skill, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 bg-slate-100 text-slate-800 font-bold text-[11px] rounded-xl border border-slate-200/80"
+                    >
+                      {skill}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* RIGHT COLUMN: Project Cards (NFT-style Reference Cards)   */}
+        {/* ========================================================= */}
+        <div className="lg:col-span-8 xl:col-span-8 space-y-4">
+          
+          {/* Projects Section Header */}
+          <div className="bg-white rounded-3xl p-5 border-2 border-slate-300 shadow-md shadow-slate-200/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FolderGit2 className="w-5 h-5 text-blue-600" />
+              <h2 className="text-base font-black text-slate-900 tracking-tight">
+                Assigned Software Projects
+              </h2>
+            </div>
+
             {!isReadOnly && (
               <button
-                onClick={() => setProjectModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
+                onClick={handleOpenCreateProject}
+                className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] inline-flex items-center gap-2 flex-shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Assign Project</span>
@@ -809,737 +882,73 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
             )}
           </div>
 
+          {/* Project Cards Grid */}
           {projects.length === 0 ? (
             <EmptyState
+              icon={FolderGit2}
               title="No projects assigned to this intern yet"
-              description="Assign an official software engineering project to organize sprints, tasks, and repository deliverables."
+              description="Assign a software engineering project to organize sprints, deliverables, and tasks."
               actionLabel={!isReadOnly ? "Assign Project" : undefined}
               onAction={!isReadOnly ? () => setProjectModalOpen(true) : undefined}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {projects.map((proj) => (
-                <div
+                <ProjectCard
                   key={proj.id}
-                  onClick={() => setSelectedDetailProject(proj)}
-                  className="bg-white rounded-3xl p-6 border-[1.5px] border-blue-400/80 shadow-md shadow-slate-200/70 flex flex-col justify-between space-y-4 hover:border-blue-500 hover:shadow-xl transition-all cursor-pointer group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0 group-hover:scale-105 transition-transform">
-                          <Code2 className="w-5 h-5" />
-                        </div>
-                        <h4 className="font-extrabold text-base text-slate-900 leading-snug group-hover:text-blue-600 transition-colors">{proj.title}</h4>
-                      </div>
-                      <StatusBadge status={proj.status || "not_started"} size="xs" />
-                    </div>
-
-                    <p className="text-xs text-slate-600 leading-relaxed">{proj.description}</p>
-
-                    {proj.technologies && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {proj.technologies.split(",").map((tech, i) => (
-                          <span
-                            key={i}
-                            className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-lg border border-slate-200/70"
-                          >
-                            {tech.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-blue-600">
-                    <span>View Full Project Workspace & Tasks</span>
-                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </div>
+                  project={proj}
+                  tasks={tasks}
+                  intern={intern}
+                  mentor={mentor}
+                  isReadOnly={isReadOnly}
+                  onOpenProject={(p) => setSelectedDetailProject(p)}
+                  onEditProject={handleOpenEditProject}
+                  onDeleteProject={handleDeleteProject}
+                />
               ))}
             </div>
           )}
         </div>
-      )}
+
+      </div>
 
       {/* ========================================================= */}
-      {/* TAB 3: TASKS DELIVERABLES (Week-wise, Project Tag, Modal) */}
+      {/* ACTION MODALS                                             */}
       {/* ========================================================= */}
-      {activeTab === "tasks" && (
-        <div className="space-y-4">
-          {/* Tasks Toolbar */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-            {/* 3 Status Filter Pills */}
-            <div className="h-11 bg-slate-100 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/90 shadow-inner flex-shrink-0">
-              <button
-                onClick={() => setTaskTabFilter("all")}
-                className={`h-full px-4 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                  taskTabFilter === "all"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                All ({tasks.length})
-              </button>
-              <button
-                onClick={() => setTaskTabFilter("pending")}
-                className={`h-full px-4 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                  taskTabFilter === "pending"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                Pending ({tasks.filter(t => t.status !== "done").length})
-              </button>
-              <button
-                onClick={() => setTaskTabFilter("completed")}
-                className={`h-full px-4 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                  taskTabFilter === "completed"
-                    ? "bg-emerald-600 text-white shadow-sm"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                Completed ({tasks.filter(t => t.status === "done").length})
-              </button>
-            </div>
 
-            {/* Week Selector */}
-            <div className="flex-shrink-0">
-              <select
-                value={taskWeekFilter}
-                onChange={(e) => setTaskWeekFilter(e.target.value)}
-                className="h-11 px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 font-extrabold text-slate-800 shadow-xs"
-              >
-                <option value="all">All Weeks</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((w) => (
-                  <option key={w} value={w}>
-                    Week {w}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* Weekly Reports Modal */}
+      <ReportsModal
+        isOpen={reportsModalOpen}
+        onClose={() => setReportsModalOpen(false)}
+        reports={reports}
+        aiSummaries={aiSummaries}
+        aiSummaryLoadingReportId={aiSummaryLoadingReportId}
+        onSummarizeReport={handleSummarizeReportWithAI}
+        onOpenFeedback={handleOpenFeedback}
+        isAdmin={isAdmin}
+      />
 
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search tasks by title or project..."
-                value={taskSearchQuery}
-                onChange={(e) => setTaskSearchQuery(e.target.value)}
-                className="w-full h-11 pl-10 pr-8 text-xs bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium transition-all shadow-xs flex items-center"
-              />
-              {taskSearchQuery && (
-                <button
-                  onClick={() => setTaskSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+      {/* Feedback Log Modal */}
+      <FeedbackLogModal
+        isOpen={feedbackLogModalOpen}
+        onClose={() => setFeedbackLogModalOpen(false)}
+        reports={reports}
+        onOpenFeedback={handleOpenFeedback}
+        isAdmin={isAdmin}
+      />
 
-            {/* Assign Task Button */}
-            {projects.length > 0 && !isReadOnly && (
-              <button
-                onClick={handleOpenCreateTask}
-                className="h-11 inline-flex items-center justify-center gap-2 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02] whitespace-nowrap flex-shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Assign Task</span>
-              </button>
-            )}
-          </div>
+      {/* AI Insights Modal */}
+      <AIInsightsModal
+        isOpen={aiInsightsModalOpen}
+        onClose={() => setAiInsightsModalOpen(false)}
+        taskRate={taskRate}
+        reportsCount={reports.length}
+        evaluation={evaluation}
+        tasks={tasks}
+        blockers={blockers}
+      />
 
-          {/* Week-Wise Structured Task Deliverables */}
-          {filteredTasks.length === 0 ? (
-            <EmptyState
-              icon={CheckSquare}
-              title="No task deliverables match the selected view"
-              description="No tasks found for this intern with the active filters."
-            />
-          ) : (
-            <div className="space-y-8 pt-2">
-              {sortedWeeks.map((weekNum) => {
-                const tasksInWeek = groupedTasksByWeek[weekNum] || [];
-                return (
-                  <div key={weekNum} className="space-y-4">
-                    {/* Week Milestone Heading Banner */}
-                    <div className="flex items-center gap-2.5">
-                      <span className="px-3.5 py-1 bg-slate-900 text-white font-extrabold text-xs rounded-xl shadow-xs">
-                        Week {weekNum}
-                      </span>
-                      <span className="text-xs font-bold text-slate-500">
-                        ({tasksInWeek.length} {tasksInWeek.length === 1 ? "deliverable" : "deliverables"})
-                      </span>
-                    </div>
-
-                    {/* Task Cards Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {tasksInWeek.map((task) => {
-                        const isDone = task.status === "done";
-                        const isInProgress = task.status === "in_progress";
-
-                        return (
-                          <div
-                            key={task.id}
-                            onClick={() => setSelectedTaskDetail(task)}
-                            className={`bg-white rounded-3xl p-6 border-[1.5px] shadow-sm hover:shadow-md cursor-pointer transition-all hover:scale-[1.01] flex flex-col justify-between space-y-4 min-h-[190px] group ${
-                              isDone
-                                ? "border-emerald-500 hover:border-emerald-600"
-                                : isInProgress
-                                ? "border-blue-500 hover:border-blue-600"
-                                : "border-slate-300 hover:border-blue-400"
-                            }`}
-                          >
-                            <div className="space-y-3">
-                              {/* Top row: Project Name & Single Status Tag */}
-                              <div className="flex items-center justify-between gap-3">
-                                <span
-                                  className="px-3 py-1 rounded-xl bg-blue-50 text-blue-700 font-extrabold text-xs border border-blue-200/70 truncate max-w-[215px] sm:max-w-[245px]"
-                                  title={getProjectName(task.project_id)}
-                                >
-                                  {getProjectName(task.project_id)}
-                                </span>
-
-                                {/* Single Status Tag */}
-                                {isDone ? (
-                                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-extrabold inline-flex items-center gap-1 flex-shrink-0">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>Completed</span>
-                                  </span>
-                                ) : isInProgress ? (
-                                  <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-extrabold inline-flex items-center gap-1 flex-shrink-0">
-                                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                    <span>In Progress</span>
-                                  </span>
-                                ) : (
-                                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-extrabold flex-shrink-0">
-                                    To Do
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Task Title */}
-                              <h4
-                                className="font-extrabold text-sm text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors"
-                                title={task.title}
-                              >
-                                {task.title}
-                              </h4>
-
-                              {/* Task Description */}
-                              {task.description && (
-                                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed" title={task.description}>
-                                  {task.description}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Card Footer: Week & Click Indicator */}
-                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                              <span className="font-bold text-slate-400">Week {task.week_number}</span>
-                              <span className="text-blue-600 font-extrabold text-xs flex items-center gap-1 group-hover:underline">
-                                <span>Details</span>
-                                <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 4: WEEKLY REPORTS & FEEDBACK                          */}
-      {/* ========================================================= */}
-      {activeTab === "reports" && (
-        <div className="space-y-4">
-          {reports.length === 0 ? (
-            <EmptyState
-              title="No weekly reports submitted yet"
-              description="The intern has not submitted any weekly progress reports yet."
-            />
-          ) : (
-            reports.map((report) => {
-              const aiSummary = aiSummaries[report.id];
-              return (
-                <div
-                  key={report.id}
-                  className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4 hover:border-blue-300 transition-all"
-                >
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <span className="px-3 py-1 bg-blue-50 text-blue-700 font-extrabold text-xs rounded-xl border border-blue-200/80">
-                        Week {report.week_number}
-                      </span>
-                      <h4 className="font-extrabold text-sm text-slate-900">
-                        Weekly Progress Report (Week {report.week_number})
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleSummarizeReportWithAI(report.id)}
-                        disabled={aiSummaryLoadingReportId === report.id}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 hover:bg-blue-100 border border-blue-200/70 rounded-2xl text-xs font-bold transition-colors"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
-                        <span>{aiSummaryLoadingReportId === report.id ? "Analyzing..." : "AI Summary"}</span>
-                      </button>
-
-                      {!isAdmin && (
-                        <button
-                          onClick={() => handleOpenFeedback(report)}
-                          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all hover:scale-[1.02]"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>Mentor Feedback</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {aiSummary && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white text-xs space-y-2 border border-indigo-800/40 shadow-sm animate-fadeIn">
-                      <div className="flex items-center gap-2 font-bold text-blue-300">
-                        <Brain className="w-4 h-4 text-blue-400" />
-                        <span>AI Executive Weekly Summary</span>
-                        {aiSummary.risk_level && (
-                          <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-500/30 text-[10px] uppercase">
-                            Risk: {aiSummary.risk_level}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-blue-100/90 leading-relaxed">{aiSummary.summary_text}</p>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
-                      <span className="font-extrabold text-slate-800">Tasks Completed:</span>
-                      <p className="text-slate-600 leading-relaxed">{report.tasks_completed_summary || "None reported."}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
-                      <span className="font-extrabold text-slate-800">Learnings & Skills:</span>
-                      <p className="text-slate-600 leading-relaxed">{report.learnings_and_skills || "None reported."}</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 5: FEEDBACK LOG                                       */}
-      {/* ========================================================= */}
-      {activeTab === "feedback_history" && (
-        <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
-          <h4 className="font-black text-sm text-slate-900">Chronological Mentor Feedback</h4>
-          {reports.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No reports or feedback given yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {reports.map((report) => (
-                <div key={report.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                  <div className="flex items-center justify-between font-bold text-slate-800">
-                    <span className="font-extrabold">Week {report.week_number} Feedback Log</span>
-                    {!isAdmin ? (
-                      <button
-                        onClick={() => handleOpenFeedback(report)}
-                        className="text-blue-600 hover:text-blue-700 font-extrabold"
-                      >
-                        Update Feedback
-                      </button>
-                    ) : (
-                      <span className="text-slate-400 text-[11px] font-semibold">Recorded</span>
-                    )}
-                  </div>
-                  <p className="text-slate-600">Review feedback status via the Mentor Feedback modal.</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 6: AI INSIGHTS                                        */}
-      {/* ========================================================= */}
-      {activeTab === "ai_insights" && (
-        <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-            <Sparkles className="w-5 h-5 text-purple-600" />
-            <h4 className="font-black text-sm text-slate-900">AI Trajectory & Risk Assessment</h4>
-          </div>
-          <div className="p-5 bg-purple-50/70 border border-purple-200/80 rounded-2xl text-xs text-purple-950 space-y-2">
-            <p className="font-extrabold text-sm">Automated 6-Week Trajectory Prediction</p>
-            <p className="text-purple-900 leading-relaxed">
-              Based on the intern's task completion pace ({taskRate}%) and report frequency ({reports.length} submissions), the intern's overall performance is rated as <strong>{evaluation ? evaluation.recommendation : "On Track"}</strong>.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TASK DETAIL POPUP MODAL                                   */}
-      {/* ========================================================= */}
-      {selectedTaskDetail && (
-        <Modal
-          isOpen={Boolean(selectedTaskDetail)}
-          onClose={() => setSelectedTaskDetail(null)}
-          title="Task Deliverable Details"
-          subtitle={`Deliverable breakdown for ${getProjectName(selectedTaskDetail.project_id)}`}
-        >
-          <div className="space-y-4 text-xs">
-            {/* Top Badges */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-extrabold text-xs border border-blue-200/70 flex items-center gap-1">
-                  <FolderGit2 className="w-3.5 h-3.5" />
-                  <span>{getProjectName(selectedTaskDetail.project_id)}</span>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200/70">
-                  Week {selectedTaskDetail.week_number}
-                </span>
-                <span
-                  className={`px-2.5 py-1 rounded-lg font-black text-xs uppercase tracking-wider ${
-                    selectedTaskDetail.priority === "critical"
-                      ? "bg-rose-500 text-white"
-                      : selectedTaskDetail.priority === "high"
-                      ? "bg-amber-500 text-white"
-                      : selectedTaskDetail.priority === "medium"
-                      ? "bg-blue-500 text-white"
-                      : "bg-slate-700 text-white"
-                  }`}
-                >
-                  {selectedTaskDetail.priority}
-                </span>
-              </div>
-              <StatusBadge status={selectedTaskDetail.status || "todo"} size="sm" />
-            </div>
-
-            {/* Title */}
-            <div>
-              <h3 className="font-black text-base text-slate-900 leading-snug">
-                {selectedTaskDetail.title}
-              </h3>
-              {selectedTaskDetail.due_date && (
-                <p className="text-[11px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Target Due Date: {formatTaskDate(selectedTaskDetail.due_date)}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Scope / Description */}
-            <div className="space-y-1">
-              <span className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px]">Scope & Requirements</span>
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 leading-relaxed text-slate-700 font-medium">
-                {selectedTaskDetail.description || "No specific description provided."}
-              </div>
-            </div>
-
-            {/* Mentor Guidance Notes */}
-            {selectedTaskDetail.mentor_notes && (
-              <div className="space-y-1">
-                <span className="font-extrabold text-amber-800 uppercase tracking-wider text-[10px]">Mentor Guidance</span>
-                <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200/80 text-amber-950 font-medium leading-relaxed">
-                  {selectedTaskDetail.mentor_notes}
-                </div>
-              </div>
-            )}
-
-            {/* Hours Summary */}
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
-              <span className="font-semibold text-slate-500">Estimated: <strong>{selectedTaskDetail.estimated_hours || 0}h</strong></span>
-              <span className="font-semibold text-slate-500">Logged Hours: <strong className="text-blue-600">{selectedTaskDetail.actual_hours || 0}h</strong></span>
-            </div>
-
-            {/* Submitted Deliverables Links */}
-            {(selectedTaskDetail.submission_url || selectedTaskDetail.attachment_url || selectedTaskDetail.submission_notes) && (
-              <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-2.5">
-                <span className="font-extrabold text-emerald-950 uppercase tracking-wider text-[10px]">Intern Submission Artifacts</span>
-                {selectedTaskDetail.submission_notes && (
-                  <p className="text-slate-700 italic">
-                    "{selectedTaskDetail.submission_notes}"
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {selectedTaskDetail.submission_url && (
-                    <a
-                      href={selectedTaskDetail.submission_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>View Code / PR Link</span>
-                    </a>
-                  )}
-                  {selectedTaskDetail.attachment_url && (
-                    <a
-                      href={selectedTaskDetail.attachment_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-xs"
-                    >
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <span>Download Artifact</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Actions (Hidden if isReadOnly) */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              {!isReadOnly ? (
-                <button
-                  type="button"
-                  onClick={() => handleDeleteTask(selectedTaskDetail.id)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Task</span>
-                </button>
-              ) : <div />}
-
-              <div className="flex items-center gap-2">
-                {!isReadOnly && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const task = selectedTaskDetail;
-                      setSelectedTaskDetail(null);
-                      handleOpenEditTask(task);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit Task</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedTaskDetail(null)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-xl font-bold transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Task Create / Edit Modal (Multi-Intern support) */}
-      <Modal
-        isOpen={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
-        title={editingTask ? "Edit Task Deliverable" : `Assign Task`}
-        subtitle="Specify deliverable title, target milestone week, priority, scope, and assigned intern(s)"
-      >
-        <form onSubmit={handleSaveTask} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Task Title *
-            </label>
-            <input
-              type="text"
-              required
-              value={taskFormData.title}
-              onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
-              placeholder="e.g. Implement authentication middleware & JWT handlers"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Project Track *
-            </label>
-            <select
-              required
-              value={taskFormData.project_id}
-              onChange={(e) => setTaskFormData({ ...taskFormData, project_id: e.target.value })}
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-semibold"
-            >
-              <option value="">Select Project Track</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Assign to Intern(s) Multi-Select Selector (Only when creating a new task) */}
-          {!editingTask && (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-blue-600" />
-                <span>Assign to Intern(s) *</span>
-              </label>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 max-h-36 overflow-y-auto">
-                {allAssignedInterns.length > 0 ? (
-                  allAssignedInterns.map((item) => {
-                    const iId = item.intern_id || item.intern?.id;
-                    const iName = item.intern?.profile?.full_name || item.intern?.email || `Intern #${iId}`;
-                    const isChecked = taskFormData.selected_intern_ids?.includes(iId);
-
-                    return (
-                      <label
-                        key={iId}
-                        className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer text-xs font-bold text-slate-800"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleInternSelection(iId)}
-                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                        />
-                        <span>{iName}</span>
-                        <span className="text-[10px] text-slate-400 font-semibold">({item.department})</span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={true}
-                      readOnly
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>{intern?.profile?.full_name || intern?.email}</span>
-                  </label>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Task Date
-              </label>
-              <input
-                type="date"
-                value={taskFormData.due_date}
-                onChange={(e) => {
-                  const newDate = e.target.value;
-                  const internStart = internship?.start_date || (internship?.intern?.created_at ? internship.intern.created_at.slice(0, 10) : newDate);
-                  const autoWeek = calculateWeekFromStartDate(internStart, newDate);
-                  setTaskFormData({ ...taskFormData, due_date: newDate, week_number: autoWeek });
-                }}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Target Week
-              </label>
-              <select
-                value={taskFormData.week_number}
-                onChange={(e) => setTaskFormData({ ...taskFormData, week_number: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((w) => (
-                  <option key={w} value={w}>
-                    Week {w}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Priority
-              </label>
-              <select
-                value={taskFormData.priority}
-                onChange={(e) => setTaskFormData({ ...taskFormData, priority: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-semibold"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Est Hours
-              </label>
-              <input
-                type="number"
-                min="0.5"
-                step="0.5"
-                value={taskFormData.estimated_hours}
-                onChange={(e) => setTaskFormData({ ...taskFormData, estimated_hours: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Scope & Acceptance Criteria
-            </label>
-            <textarea
-              rows={3}
-              value={taskFormData.description}
-              onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
-              placeholder="Detailed specifications, technical endpoints, PR requirements..."
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Mentor Guidance Notes
-            </label>
-            <textarea
-              rows={2}
-              value={taskFormData.mentor_notes}
-              onChange={(e) => setTaskFormData({ ...taskFormData, mentor_notes: e.target.value })}
-              placeholder="Pointers to docs, reference architectures, or best practices..."
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-            />
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setTaskModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={taskSaving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors disabled:opacity-50"
-            >
-              {taskSaving ? "Saving..." : editingTask ? "Update Task" : "Assign Task"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Modals */}
+      {/* Mentor Feedback Modal */}
       {feedbackModalReport && (
         <FeedbackModal
           isOpen={Boolean(feedbackModalReport)}
@@ -1550,6 +959,7 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
         />
       )}
 
+      {/* Final Evaluation Modal */}
       {evaluationModalOpen && internship && (
         <EvaluationModal
           isOpen={evaluationModalOpen}
@@ -1560,16 +970,153 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
         />
       )}
 
-      {/* Assign Project Modal */}
+      {/* Assign / Edit Project Modal */}
       <Modal
         isOpen={projectModalOpen}
-        onClose={() => setProjectModalOpen(false)}
-        title={`Assign Project to ${intern?.profile?.full_name || intern?.email}`}
-        subtitle="Define project scope, tech stack, and repository template"
+        onClose={() => {
+          setProjectModalOpen(false);
+          setEditingProject(null);
+        }}
+        title={
+          editingProject
+            ? `Edit Project: ${editingProject.title}`
+            : `Assign Project to ${intern?.profile?.full_name || intern?.email}`
+        }
+        subtitle={
+          editingProject
+            ? "Update project specifications, status, tech stack, and cover image"
+            : "Define project scope, cover image, tech stack, and repository template"
+        }
+        maxWidth="max-w-xl"
       >
-        <form onSubmit={handleCreateProject} className="space-y-4">
+        <form onSubmit={handleSaveProject} className="space-y-4 pt-1">
+          {/* Multi-Select Intern Assignment */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                Assign Interns ({projectFormData.internship_ids?.length || 0} Selected) *
+              </label>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setProjectFormData({
+                      ...projectFormData,
+                      internship_ids: (cohortInternships.length > 0 ? cohortInternships : [internship]).map((i) => i?.id).filter(Boolean),
+                    })
+                  }
+                  className="text-blue-600 hover:text-blue-700 font-bold cursor-pointer"
+                >
+                  Select All
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setProjectFormData({ ...projectFormData, internship_ids: [] })}
+                  className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Selected Intern Chips */}
+            {projectFormData.internship_ids?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
+                {projectFormData.internship_ids.map((id) => {
+                  const matched = (cohortInternships.length > 0 ? cohortInternships : [internship]).find((i) => i?.id === id);
+                  const name = matched?.intern?.profile?.full_name || matched?.intern?.email || (id === internship?.id ? (intern?.profile?.full_name || intern?.email) : `Track #${id}`);
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold shadow-2xs animate-fadeIn"
+                    >
+                      <UserAvatar
+                        avatarUrl={matched?.intern?.profile?.avatar_url || (id === internship?.id ? intern?.profile?.avatar_url : null)}
+                        name={name}
+                        size="xs"
+                      />
+                      <span className="truncate max-w-[120px]">{name}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProjectFormData({
+                            ...projectFormData,
+                            internship_ids: projectFormData.internship_ids.filter((tid) => tid !== id),
+                          })
+                        }
+                        className="p-0.5 hover:bg-blue-200 rounded-full text-blue-600 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Candidate Selection List */}
+            <div className="max-h-44 overflow-y-auto border-2 border-slate-200 rounded-2xl p-2 bg-slate-50 divide-y divide-slate-100 space-y-1">
+              {getUniqueInternCurrentTracks(cohortInternships.length > 0 ? cohortInternships : [internship].filter(Boolean)).map((i) => {
+                const isSelected = projectFormData.internship_ids?.includes(i.id);
+                const iName = i.intern?.profile?.full_name || i.intern?.email || "Intern";
+
+                return (
+                  <label
+                    key={i.id}
+                    className={`flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-100/70 border border-blue-300"
+                        : "bg-white hover:bg-slate-100/80 border border-slate-200/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setProjectFormData({
+                              ...projectFormData,
+                              internship_ids: [...(projectFormData.internship_ids || []), i.id],
+                            });
+                          } else {
+                            setProjectFormData({
+                              ...projectFormData,
+                              internship_ids: (projectFormData.internship_ids || []).filter((id) => id !== i.id),
+                            });
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <UserAvatar
+                        avatarUrl={i.intern?.profile?.avatar_url}
+                        name={iName}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {iName}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                          {i.department} &bull; Week {i.current_week} of {i.duration_weeks}W
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">
+                        Assigned
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
               Project Title *
             </label>
             <input
@@ -1577,13 +1124,80 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
               required
               value={projectFormData.title}
               onChange={(e) => setProjectFormData({ ...projectFormData, title: e.target.value })}
-              placeholder="e.g. NETSOL Cloud Lease Optimization Engine"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              placeholder="e.g. Enterprise Invoice Automation Microservice"
+              className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold"
             />
           </div>
 
+          {/* Project Cover Image Option */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+              Project Cover Image
+            </label>
+            <div className="space-y-2">
+              {projectCoverPreview ? (
+                <div className="relative w-full h-36 rounded-2xl overflow-hidden border border-slate-200 group bg-slate-900">
+                  <img
+                    src={projectCoverPreview}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all">
+                    <label className="px-3 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-bold cursor-pointer hover:bg-slate-100 shadow-md">
+                      Change Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProjectCoverChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProjectCoverFile(null);
+                        setProjectCoverPreview(null);
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="w-full py-4 px-3 border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-blue-50/30 transition-all text-xs text-slate-500">
+                  <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                  <span className="font-bold">Upload project cover image (PNG, JPG, WEBP)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProjectCoverChange}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
+          {editingProject && (
+            <div>
+              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                Project Status
+              </label>
+              <select
+                value={projectFormData.status}
+                onChange={(e) => setProjectFormData({ ...projectFormData, status: e.target.value })}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold"
+              >
+                <option value="not_started">Not Started</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
               Project Scope & Deliverables
             </label>
             <textarea
@@ -1591,12 +1205,12 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
               value={projectFormData.description}
               onChange={(e) => setProjectFormData({ ...projectFormData, description: e.target.value })}
               placeholder="Key deliverables, sprint architecture, and milestones..."
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium leading-relaxed"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
               Technologies & Tools
             </label>
             <input
@@ -1604,12 +1218,12 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
               value={projectFormData.technologies}
               onChange={(e) => setProjectFormData({ ...projectFormData, technologies: e.target.value })}
               placeholder="React, FastAPI, PostgreSQL, Docker"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-semibold"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
               Repository URL
             </label>
             <input
@@ -1617,113 +1231,110 @@ export default function InternDetailView({ internId, onBack, isAdmin: propIsAdmi
               value={projectFormData.repo_url}
               onChange={(e) => setProjectFormData({ ...projectFormData, repo_url: e.target.value })}
               placeholder="https://github.com/NETSOL/project-repo"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+              className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
             />
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setProjectModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              onClick={() => {
+                setProjectModalOpen(false);
+                setEditingProject(null);
+              }}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={projectSaving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition-all hover:scale-105 disabled:opacity-50"
             >
-              {projectSaving ? "Assigning..." : "Assign Project"}
+              {projectSaving ? "Saving..." : editingProject ? "Update Project" : "Assign Project"}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Printable Evaluation Report Modal */}
-      {printModalOpen && internship && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Corporate Evaluation Report</h3>
-                <p className="text-xs text-slate-500">NETSOL Technologies &bull; Intern Performance Record</p>
-              </div>
-              <button
-                onClick={() => setPrintModalOpen(false)}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700"
-              >
-                Close
-              </button>
-            </div>
+      {/* Track History Switcher Modal */}
+      <Modal
+        isOpen={trackHistoryModalOpen}
+        onClose={() => setTrackHistoryModalOpen(false)}
+        title="Internship Tracks & Historical Milestones"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500">
+            This candidate has participated in multiple internship tracks. Select any track to inspect its archived deliverables, projects, Kanban tasks, weekly reports, and final evaluations.
+          </p>
 
-            <div className="space-y-4 text-xs print:p-0">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <div>
-                  <p className="font-bold text-slate-800">Intern Name:</p>
-                  <p className="text-slate-600">{intern?.profile?.full_name || intern?.email}</p>
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800">Department Track:</p>
-                  <p className="text-slate-600">{internship.department}</p>
-                </div>
-              </div>
+          <div className="space-y-3">
+            {userAllInternships.map((track, idx) => {
+              const isSelected = internship?.id === track.id;
+              const isOngoing = isTrackOngoing(track.status);
 
-              {evaluation ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="p-3.5 bg-indigo-50 rounded-2xl border border-indigo-100">
-                      <p className="font-bold text-indigo-900">Overall Rating</p>
-                      <p className="text-xl font-black text-indigo-950 mt-1">{evaluation.overall_rating}/10</p>
+              return (
+                <div
+                  key={track.id}
+                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isSelected
+                      ? "bg-blue-50/70 border-blue-500 shadow-xs"
+                      : "bg-white border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white text-[11px] font-black">
+                        Track #{track.id}
+                      </span>
+                      <span className="text-sm font-black text-slate-900">
+                        {track.department || "General Engineering"}
+                      </span>
+                      {isOngoing && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                          Active Current Track
+                        </span>
+                      )}
                     </div>
-                    <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-100">
-                      <p className="font-bold text-blue-900">Technical Rating</p>
-                      <p className="text-xl font-black text-blue-950 mt-1">{evaluation.technical_skills_rating}/5</p>
-                    </div>
-                    <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-100">
-                      <p className="font-bold text-purple-900">Soft Skills</p>
-                      <p className="text-xl font-black text-purple-950 mt-1">{evaluation.soft_skills_rating}/5</p>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap font-medium">
+                      <span>Duration: {track.duration_weeks} Weeks</span>
+                      <span>&bull;</span>
+                      <span>Start: {track.start_date}</span>
+                      <span>&bull;</span>
+                      <span>End: {track.end_date}</span>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 font-bold text-emerald-900 flex justify-between">
-                    <span>Hiring Recommendation:</span>
-                    <span className="uppercase">{evaluation.recommendation}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-center">
+                    <StatusBadge status={track.status} size="sm" />
+                    <button
+                      type="button"
+                      disabled={isSelected}
+                      onClick={() => {
+                        handleSwitchTrack(track.id);
+                        setTrackHistoryModalOpen(false);
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                        isSelected
+                          ? "bg-blue-600 text-white shadow-xs opacity-90 cursor-default"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer"
+                      }`}
+                    >
+                      {isSelected
+                        ? "Currently Viewing"
+                        : isOngoing
+                        ? "Switch to Active Track"
+                        : "View Past Track"}
+                    </button>
                   </div>
-
-                  {evaluation.final_comments && (
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                      <p className="font-bold text-slate-800">Mentor Assessment:</p>
-                      <p className="text-slate-600 italic">"{evaluation.final_comments}"</p>
-                    </div>
-                  )}
-
-                  {evaluation.ai_summary && (
-                    <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-1">
-                      <p className="font-bold text-blue-900">AI Performance Synthesis:</p>
-                      <p className="text-blue-800 leading-relaxed">{evaluation.ai_summary}</p>
-                    </div>
-                  )}
                 </div>
-              ) : (
-                <p className="text-slate-400 italic text-center py-6">
-                  Final 6-week evaluation has not yet been recorded.
-                </p>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={handleTriggerPrint}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-sm shadow-blue-500/20"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print / Save as PDF</span>
-              </button>
-            </div>
+              );
+            })}
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

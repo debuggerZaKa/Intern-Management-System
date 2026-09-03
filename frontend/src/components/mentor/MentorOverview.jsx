@@ -18,6 +18,7 @@ import AttentionTracker from "./AttentionTracker";
 import InternDetailView from "./InternDetailView";
 import Loader from "../common/Loader";
 import ErrorMessage from "../common/ErrorMessage";
+import { getUniqueInternCurrentTracks } from "../../utils/internshipUtils";
 
 export default function MentorOverview() {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ export default function MentorOverview() {
         mentorService.getAssignedInterns(),
         mentorService.getInternsNeedingAttention(),
       ]);
-      setInternships(internsData || []);
+      setInternships(getUniqueInternCurrentTracks(internsData || []));
       setAttentionList(attentionData || []);
     } catch (err) {
       console.error("Failed to load mentor overview data:", err);

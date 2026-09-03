@@ -47,6 +47,56 @@ def edit_project(
 ):
     return update_project(db, project_id, req, current_user)
 
+import os
+import uuid
+import shutil
+from fastapi import UploadFile, File
+
+@router.post("/{project_id}/image", response_model=ProjectResponse)
+def upload_project_image(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    project = get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    is_admin = current_user.role and current_user.role.name == "admin"
+    is_mentor = project.internship and project.internship.mentor_id == current_user.id
+    is_intern = project.internship and project.internship.intern_id == current_user.id
+
+    if not (is_admin or is_mentor or is_intern):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Only the assigned mentor, intern, or an admin can upload images for this project."
+        )
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (PNG, JPG, WEBP, etc.)")
+    
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "projects")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".png"
+    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"]:
+        ext = ".png"
+    
+    filename = f"project_{project_id}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(upload_dir, filename)
+
+    try:
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to save project image: {str(e)}")
+    
+    project.image_url = f"/uploads/projects/{filename}"
+    db.commit()
+    db.refresh(project)
+    return project
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_project(
     project_id: int,

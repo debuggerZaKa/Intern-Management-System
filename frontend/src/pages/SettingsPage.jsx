@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Settings,
   User,
@@ -23,12 +23,15 @@ import {
   Shield,
   Sliders,
   RotateCcw,
-  X
+  X,
+  Camera,
+  Upload
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { userService } from "../services/userService";
 import { authService } from "../services/authService";
 import { adminService } from "../services/adminService";
+import { getMediaUrl } from "../utils/mediaUtils";
 import AppLayout from "../components/common/AppLayout";
 import StatusBadge from "../components/common/StatusBadge";
 import Loader from "../components/common/Loader";
@@ -72,6 +75,10 @@ export default function SettingsPage() {
 
   const [newDepartment, setNewDepartment] = useState("");
   const [newDuration, setNewDuration] = useState("");
+
+  // Avatar Upload State
+  const avatarInputRef = useRef(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Loading & Alert States
   const [loading, setLoading] = useState(false);
@@ -135,6 +142,25 @@ export default function SettingsPage() {
       loadPlatformSettings();
     }
   }, [isAdmin]);
+
+  // Avatar Upload Handler for logged-in user (Intern / Mentor / Admin)
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setAvatarUploading(true);
+      setProfileError(null);
+      const updatedProfile = await userService.uploadMyAvatar(file);
+      setUser((prev) => (prev ? { ...prev, profile: updatedProfile } : prev));
+      setProfileSuccess("Profile photo updated successfully!");
+      setTimeout(() => setProfileSuccess(null), 3500);
+    } catch (err) {
+      console.error("Failed to upload avatar:", err);
+      setProfileError(err.message || "Failed to upload profile photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   // Profile Update Handler
   const handleProfileSubmit = async (e) => {
@@ -261,563 +287,657 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fadeIn">
-        
-        {/* ========================================================= */}
-        {/* TOP PROFILE HERO BANNER BAR                               */}
-        {/* ========================================================= */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 text-white border border-slate-800/80 shadow-md shadow-slate-900/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 font-black text-xl flex items-center justify-center border-2 border-white/20 shadow-lg shadow-blue-500/20 flex-shrink-0">
-              {userInitials}
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl font-black tracking-tight text-white truncate">
-                  {user?.profile?.full_name || user?.email}
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-black uppercase tracking-wider">
-                  {user?.role?.name || "Member"}
-                </span>
-                <StatusBadge status={user?.status || "active"} size="xs" />
-              </div>
-
-              <p className="text-xs text-slate-300 font-medium mt-1 flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5 text-blue-400" />
-                  {user?.email}
-                </span>
-                {user?.profile?.department && (
-                  <>
-                    <span>•</span>
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <Building className="w-3.5 h-3.5 text-blue-400" />
-                      {user.profile.department}
-                    </span>
-                  </>
-                )}
-                {user?.profile?.university && (
-                  <>
-                    <span>•</span>
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <GraduationCap className="w-3.5 h-3.5 text-blue-400" />
-                      {user.profile.university}
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Viewing / Editing Mode Switcher */}
-          <div className="bg-white/10 backdrop-blur-md p-1.5 rounded-2xl flex items-center gap-1 border border-white/10 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setProfileMode("view")}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                profileMode === "view"
-                  ? "bg-white text-slate-900 shadow-md shadow-slate-900/20"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Eye className="w-4 h-4" />
-              <span>View Profile</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setProfileMode("edit")}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                profileMode === "edit"
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Edit2 className="w-4 h-4" />
-              <span>Edit Profile</span>
-            </button>
-          </div>
-        </div>
+      <div className="space-y-4 -mt-3 sm:-mt-5 lg:-mt-6 animate-fadeIn">
+        {/* Hidden File Input for Avatar Upload */}
+        <input
+          type="file"
+          ref={avatarInputRef}
+          onChange={handleAvatarUpload}
+          accept="image/*"
+          className="hidden"
+        />
 
         {/* Global Feedback Banners */}
         {profileSuccess && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
+          <div className="p-4 bg-emerald-50 border-2 border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>{profileSuccess}</span>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* CARD 1: PERSONAL PROFILE & BIO DETAILS                    */}
-        {/* ========================================================= */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                <User className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Personal & Professional Information</h3>
-                <p className="text-xs text-slate-500 font-medium">Your platform account details, contact info, and bio</p>
-              </div>
-            </div>
-
-            {profileMode === "view" ? (
-              <button
-                type="button"
-                onClick={() => setProfileMode("edit")}
-                className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-extrabold transition-colors flex items-center gap-1.5"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-                <span>Edit Info</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setProfileMode("view")}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold transition-colors flex items-center gap-1.5"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Cancel</span>
-              </button>
-            )}
+        {passwordSuccess && (
+          <div className="p-4 bg-emerald-50 border-2 border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{passwordSuccess}</span>
           </div>
+        )}
 
-          {profileError && <ErrorMessage message={profileError} onClose={() => setProfileError(null)} />}
+        {settingsSuccess && (
+          <div className="p-4 bg-emerald-50 border-2 border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{settingsSuccess}</span>
+          </div>
+        )}
 
-          {profileMode === "view" ? (
-            /* READ-ONLY VIEWING MODE */
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Full Name</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{user?.profile?.full_name || "Not provided"}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Email Address</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{user?.email}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Phone Number</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{user?.profile?.phone || "Not provided"}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Department / Track</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <Building className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{user?.profile?.department || "General Engineering"}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">University / Institute</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{user?.profile?.university || "Not provided"}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Degree & Semester</span>
-                  <p className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
-                    <Globe className="w-3.5 h-3.5 text-blue-600" />
-                    <span>
-                      {user?.profile?.degree ? `${user.profile.degree} (Sem ${user.profile.semester || 1})` : "Not provided"}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Social Links & Bio */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Social Profiles</span>
-                  <div className="flex items-center gap-4 text-xs font-bold">
-                    {user?.profile?.linkedin_url ? (
-                      <a
-                        href={user.profile.linkedin_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 hover:underline flex items-center gap-1.5"
-                      >
-                        <Linkedin className="w-4 h-4 text-blue-600" />
-                        <span>LinkedIn Profile</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-400 flex items-center gap-1.5"><Linkedin className="w-4 h-4 text-slate-300" /> No LinkedIn attached</span>
-                    )}
-
-                    {user?.profile?.github_url ? (
-                      <a
-                        href={user.profile.github_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-slate-900 hover:underline flex items-center gap-1.5"
-                      >
-                        <Github className="w-4 h-4 text-slate-800" />
-                        <span>GitHub Profile</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-400 flex items-center gap-1.5"><Github className="w-4 h-4 text-slate-300" /> No GitHub attached</span>
-                    )}
+        {/* ========================================================= */}
+        {/* SPLIT SCREEN: PROFILE (LEFT) | OTHER SETTINGS (RIGHT)     */}
+        {/* ========================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          
+          {/* ========================================================= */}
+          {/* LEFT COLUMN: PROFILE CARD (READ-ONLY / EDITABLE) (5 COLS) */}
+          {/* ========================================================= */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="bg-white rounded-3xl p-6 border-2 border-slate-300 shadow-md shadow-slate-200/60 space-y-5">
+              
+              {/* Header with Top-Right Edit Button */}
+              <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 border-2 border-blue-200 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                      Profile Details
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Account identity & credentials
+                    </p>
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Biography / Overview</span>
-                  <p className="text-xs text-slate-700 italic font-medium leading-relaxed">
-                    "{user?.profile?.bio || "No biography overview added yet."}"
-                  </p>
+                {/* Edit Button on Top Right */}
+                {profileMode === "view" ? (
+                  <button
+                    type="button"
+                    onClick={() => setProfileMode("edit")}
+                    className="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-105"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Profile</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMode("view");
+                      setProfileError(null);
+                    }}
+                    className="h-9 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition-all border-2 border-slate-200 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancel</span>
+                  </button>
+                )}
+              </div>
+
+              {profileError && (
+                <ErrorMessage message={profileError} onClose={() => setProfileError(null)} />
+              )}
+
+              {/* Avatar Hero & Upload Badge */}
+              <div className="flex flex-col items-center text-center pb-4 border-b-2 border-slate-100">
+                <div className="relative mb-3 group">
+                  {user?.profile?.avatar_url ? (
+                    <img
+                      src={getMediaUrl(user.profile.avatar_url)}
+                      alt={user?.profile?.full_name || "Avatar"}
+                      className="w-24 h-24 rounded-3xl object-cover border-2 border-slate-200 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-600 text-white font-black text-2xl flex items-center justify-center border-2 border-slate-200 shadow-md">
+                      {userInitials}
+                    </div>
+                  )}
+
+                  {/* Always Visible Camera Badge */}
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    title="Change Profile Photo"
+                    className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md border-2 border-white flex items-center justify-center cursor-pointer transition-all hover:scale-110"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                  {user?.profile?.full_name || user?.email}
+                </h2>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap justify-center">
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black uppercase tracking-wider">
+                    {user?.role?.name || "Member"}
+                  </span>
+                  <StatusBadge status={user?.status || "active"} size="xs" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{avatarUploading ? "Uploading..." : "Change Photo"}</span>
+                </button>
+              </div>
+
+              {profileMode === "view" ? (
+                /* ========================================================= */
+                /* READ-ONLY PROFILE DISPLAY                                 */
+                /* ========================================================= */
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <User className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Full Name
+                      </span>
+                      <p className="font-extrabold text-slate-900 truncate">
+                        {user?.profile?.full_name || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <Mail className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Email Address
+                      </span>
+                      <p className="font-extrabold text-slate-900 truncate">{user?.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <Phone className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Phone Number
+                      </span>
+                      <p className="font-extrabold text-slate-900 truncate">
+                        {user?.profile?.phone || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <Building className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Department / Track
+                      </span>
+                      <p className="font-extrabold text-slate-900">
+                        {user?.profile?.department || "General Engineering"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <GraduationCap className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        University / Institute
+                      </span>
+                      <p className="font-extrabold text-slate-900">
+                        {user?.profile?.university || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border-2 border-slate-200/80">
+                    <Globe className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Degree & Academic Level
+                      </span>
+                      <p className="font-extrabold text-slate-900">
+                        {user?.profile?.degree
+                          ? `${user.profile.degree}${user.profile.semester ? ` (Sem ${user.profile.semester})` : ""}`
+                          : "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Social Profiles */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border-2 border-slate-200/80 space-y-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                      Social & Developer Links
+                    </span>
+                    <div className="flex flex-col gap-2 font-bold">
+                      {user?.profile?.linkedin_url ? (
+                        <a
+                          href={user.profile.linkedin_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline flex items-center gap-2"
+                        >
+                          <Linkedin className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                          <span className="truncate">{user.profile.linkedin_url}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 flex items-center gap-2">
+                          <Linkedin className="w-4 h-4 text-slate-300" />
+                          <span>No LinkedIn URL attached</span>
+                        </span>
+                      )}
+
+                      {user?.profile?.github_url ? (
+                        <a
+                          href={user.profile.github_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-slate-900 hover:underline flex items-center gap-2"
+                        >
+                          <Github className="w-4 h-4 text-slate-800 flex-shrink-0" />
+                          <span className="truncate">{user.profile.github_url}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 flex items-center gap-2">
+                          <Github className="w-4 h-4 text-slate-300" />
+                          <span>No GitHub URL attached</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bio */}
+                  {user?.profile?.bio && (
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border-2 border-slate-200/80 space-y-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                        Professional Bio / Summary
+                      </span>
+                      <p className="text-xs text-slate-700 font-medium leading-relaxed italic">
+                        "{user.profile.bio}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ========================================================= */
+                /* EDITABLE PROFILE FORM                                     */
+                /* ========================================================= */
+                <form onSubmit={handleProfileSubmit} className="space-y-4 animate-fadeIn">
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="full_name"
+                        value={profileForm.full_name}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, full_name: e.target.value })
+                        }
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        name="phone"
+                        value={profileForm.phone}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, phone: e.target.value })
+                        }
+                        placeholder="+92-300-1234567"
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        Department / Practice
+                      </label>
+                      <input
+                        type="text"
+                        name="department"
+                        value={profileForm.department}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, department: e.target.value })
+                        }
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        University / Institute
+                      </label>
+                      <input
+                        type="text"
+                        name="university"
+                        value={profileForm.university}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, university: e.target.value })
+                        }
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                          Degree Program
+                        </label>
+                        <input
+                          type="text"
+                          name="degree"
+                          value={profileForm.degree}
+                          onChange={(e) =>
+                            setProfileForm({ ...profileForm, degree: e.target.value })
+                          }
+                          placeholder="BS Computer Science"
+                          className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                          Semester
+                        </label>
+                        <input
+                          type="number"
+                          name="semester"
+                          value={profileForm.semester}
+                          onChange={(e) =>
+                            setProfileForm({ ...profileForm, semester: e.target.value })
+                          }
+                          className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        LinkedIn Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        name="linkedin_url"
+                        value={profileForm.linkedin_url}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, linkedin_url: e.target.value })
+                        }
+                        placeholder="https://linkedin.com/in/username"
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        name="github_url"
+                        value={profileForm.github_url}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, github_url: e.target.value })
+                        }
+                        placeholder="https://github.com/username"
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                        Professional Bio / Summary
+                      </label>
+                      <textarea
+                        name="bio"
+                        rows={3}
+                        value={profileForm.bio}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, bio: e.target.value })
+                        }
+                        placeholder="Brief overview of your role, technical background, or interests..."
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Save Button below all info */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={savingProfile}
+                      className="w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{savingProfile ? "Saving Profile..." : "Save Profile Changes"}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* ========================================================= */}
+          {/* RIGHT COLUMN: OTHER SETTINGS (SECURITY & ADMIN) (7 COLS)  */}
+          {/* ========================================================= */}
+          <div className="lg:col-span-7 space-y-5">
+            
+            {/* CARD 1: SECURITY & PASSWORD AUTHENTICATION */}
+            <div className="bg-white rounded-3xl p-6 border-2 border-slate-300 shadow-md shadow-slate-200/60 space-y-5">
+              <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-600 flex items-center justify-center font-bold flex-shrink-0">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                      Security & Password Authentication
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Update your account password and security credentials
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            /* EDITING FORM MODE */
-            <form onSubmit={handleProfileSubmit} className="space-y-4 animate-fadeIn">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              {passwordError && (
+                <ErrorMessage message={passwordError} onClose={() => setPasswordError(null)} />
+              )}
+
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
+                  <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                    Current Password *
+                  </label>
                   <input
-                    type="text"
-                    name="full_name"
-                    value={profileForm.full_name}
-                    onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                    type="password"
+                    value={passwordForm.old_password}
+                    onChange={(e) =>
+                      setPasswordForm({ ...passwordForm, old_password: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
                     required
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    name="phone"
-                    value={profileForm.phone}
-                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Department</label>
-                  <input
-                    type="text"
-                    name="department"
-                    value={profileForm.department}
-                    onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">University / Institute</label>
-                  <input
-                    type="text"
-                    name="university"
-                    value={profileForm.university}
-                    onChange={(e) => setProfileForm({ ...profileForm, university: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Degree Program</label>
-                  <input
-                    type="text"
-                    name="degree"
-                    value={profileForm.degree}
-                    onChange={(e) => setProfileForm({ ...profileForm, degree: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Semester</label>
-                  <input
-                    type="number"
-                    name="semester"
-                    value={profileForm.semester}
-                    onChange={(e) => setProfileForm({ ...profileForm, semester: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">LinkedIn Profile URL</label>
-                  <input
-                    type="url"
-                    name="linkedin_url"
-                    value={profileForm.linkedin_url}
-                    onChange={(e) => setProfileForm({ ...profileForm, linkedin_url: e.target.value })}
-                    placeholder="https://linkedin.com/in/username"
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">GitHub Profile URL</label>
-                  <input
-                    type="url"
-                    name="github_url"
-                    value={profileForm.github_url}
-                    onChange={(e) => setProfileForm({ ...profileForm, github_url: e.target.value })}
-                    placeholder="https://github.com/username"
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Bio / Professional Summary</label>
-                <textarea
-                  name="bio"
-                  rows={3}
-                  value={profileForm.bio}
-                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
-                  placeholder="Share a short bio..."
-                  className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProfileMode("view")}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className="h-10 px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{savingProfile ? "Saving..." : "Save Profile"}</span>
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* ========================================================= */}
-        {/* CARD 2: SECURITY & PASSWORD MANAGEMENT                    */}
-        {/* ========================================================= */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                <Lock className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Security & Password Authentication</h3>
-                <p className="text-xs text-slate-500 font-medium">Update your account password and security credentials</p>
-              </div>
-            </div>
-          </div>
-
-          {passwordSuccess && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>{passwordSuccess}</span>
-            </div>
-          )}
-
-          {passwordError && <ErrorMessage message={passwordError} onClose={() => setPasswordError(null)} />}
-
-          <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-xl">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Current Password *</label>
-              <input
-                type="password"
-                value={passwordForm.old_password}
-                onChange={(e) => setPasswordForm({ ...passwordForm, old_password: e.target.value })}
-                className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">New Password *</label>
-                <input
-                  type="password"
-                  value={passwordForm.new_password}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                  className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Confirm New Password *</label>
-                <input
-                  type="password"
-                  value={passwordForm.confirm_password}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
-                  className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={savingPassword}
-                className="h-10 px-5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-              >
-                <KeyRound className="w-4 h-4" />
-                <span>{savingPassword ? "Updating Password..." : "Update Password"}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* ========================================================= */}
-        {/* CARD 3: PROGRAM & PLATFORM CONFIGURATION (ADMIN ONLY)     */}
-        {/* ========================================================= */}
-        {isAdmin && (
-          <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                  <Sliders className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">Platform & Program Configuration</h3>
-                  <p className="text-xs text-slate-500 font-medium">Manage departments, program tracks, AI models, and system thresholds</p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleSavePlatformSettings}
-                disabled={savingSettings}
-                className="h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <Save className="w-4 h-4" />
-                <span>{savingSettings ? "Saving..." : "Save Platform Settings"}</span>
-              </button>
-            </div>
-
-            {settingsSuccess && (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                <span>{settingsSuccess}</span>
-              </div>
-            )}
-
-            {settingsError && <ErrorMessage message={settingsError} onClose={() => setSettingsError(null)} />}
-
-            {loading ? (
-              <Loader message="Loading platform settings..." />
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Department Management */}
-                <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-4">
-                  <div className="flex items-center gap-2.5">
-                    <Building className="w-4 h-4 text-blue-600" />
-                    <h4 className="text-xs font-bold text-slate-900">Corporate Departments</h4>
-                  </div>
-
-                  <div className="flex gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                      New Password *
+                    </label>
                     <input
-                      type="text"
-                      value={newDepartment}
-                      onChange={(e) => setNewDepartment(e.target.value)}
-                      placeholder="e.g. AI & Machine Learning"
-                      className="flex-1 px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                      type="password"
+                      value={passwordForm.new_password}
+                      onChange={(e) =>
+                        setPasswordForm({ ...passwordForm, new_password: e.target.value })
+                      }
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                      required
                     />
-                    <button
-                      type="button"
-                      onClick={handleAddDepartment}
-                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
-                    </button>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {platformSettings.departments.map((dept) => (
-                      <span
-                        key={dept}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-slate-800 text-xs font-bold rounded-lg border border-slate-200/90 shadow-2xs"
-                      >
-                        {dept}
+                  <div>
+                    <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                      Confirm New Password *
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordForm.confirm_password}
+                      onChange={(e) =>
+                        setPasswordForm({ ...passwordForm, confirm_password: e.target.value })
+                      }
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold transition-all"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={savingPassword}
+                    className="h-10 px-6 bg-slate-900 hover:bg-black disabled:bg-slate-300 text-white rounded-2xl text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer hover:scale-105"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>{savingPassword ? "Updating..." : "Update Password"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* CARD 2: PLATFORM CONFIGURATION (ADMIN ONLY) */}
+            {isAdmin && (
+              <div className="bg-white rounded-3xl p-6 border-2 border-slate-300 shadow-md shadow-slate-200/60 space-y-5">
+                <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-purple-50 border-2 border-purple-200 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
+                      <Sliders className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                        Platform & Program Configuration
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Manage corporate departments, track durations, and platform thresholds
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSavePlatformSettings}
+                    disabled={savingSettings}
+                    className="h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer hover:scale-105"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingSettings ? "Saving..." : "Save Settings"}</span>
+                  </button>
+                </div>
+
+                {settingsError && (
+                  <ErrorMessage message={settingsError} onClose={() => setSettingsError(null)} />
+                )}
+
+                {loading ? (
+                  <Loader message="Loading platform settings..." />
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Department Management */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Building className="w-4 h-4 text-blue-600" />
+                        <h4 className="text-xs font-black text-slate-900">Corporate Departments</h4>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newDepartment}
+                          onChange={(e) => setNewDepartment(e.target.value)}
+                          placeholder="e.g. Cloud Architecture"
+                          className="flex-1 px-3 py-2 text-xs bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-bold"
+                        />
                         <button
                           type="button"
-                          onClick={() => handleRemoveDepartment(dept)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors"
+                          onClick={handleAddDepartment}
+                          className="px-3 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
                         </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                      </div>
 
-                {/* Duration Tracks */}
-                <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-4">
-                  <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-indigo-600" />
-                    <h4 className="text-xs font-bold text-slate-900">Internship Duration Tracks</h4>
-                  </div>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {platformSettings.departments.map((dept) => (
+                          <span
+                            key={dept}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-slate-800 text-[11px] font-extrabold rounded-xl border border-slate-200 shadow-xs"
+                          >
+                            {dept}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDepartment(dept)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={newDuration}
-                      onChange={(e) => setNewDuration(e.target.value)}
-                      placeholder="e.g. 10 (weeks)"
-                      className="flex-1 px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddDuration}
-                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
-                    </button>
-                  </div>
+                    {/* Duration Tracks */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-indigo-600" />
+                        <h4 className="text-xs font-black text-slate-900">Internship Duration Tracks</h4>
+                      </div>
 
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {platformSettings.duration_options.map((weeks) => (
-                      <span
-                        key={weeks}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-900 text-xs font-extrabold rounded-lg border border-indigo-200/80"
-                      >
-                        {weeks} Weeks Track
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={newDuration}
+                          onChange={(e) => setNewDuration(e.target.value)}
+                          placeholder="e.g. 10 (weeks)"
+                          className="flex-1 px-3 py-2 text-xs bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 font-bold"
+                        />
                         <button
                           type="button"
-                          onClick={() => handleRemoveDuration(weeks)}
-                          className="text-indigo-400 hover:text-rose-600 transition-colors"
+                          onClick={handleAddDuration}
+                          className="px-3 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
                         </button>
-                      </span>
-                    ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {platformSettings.duration_options.map((weeks) => (
+                          <span
+                            key={weeks}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-900 text-[11px] font-black rounded-xl border border-indigo-200"
+                          >
+                            {weeks} Weeks Track
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDuration(weeks)}
+                              className="text-indigo-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </AppLayout>
   );

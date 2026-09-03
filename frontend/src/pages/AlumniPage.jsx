@@ -25,8 +25,11 @@ import StatusBadge from "../components/common/StatusBadge";
 import Loader from "../components/common/Loader";
 import EmptyState from "../components/common/EmptyState";
 import ErrorMessage from "../components/common/ErrorMessage";
+import UserAvatar from "../components/common/UserAvatar";
+import { getMediaUrl } from "../utils/mediaUtils";
 import CertificateModal from "../components/admin/CertificateModal";
 import StatCard from "../components/common/StatCard";
+import AdminIntern360View from "../components/admin/AdminIntern360View";
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 const STATUS = {
@@ -70,6 +73,8 @@ export default function AlumniPage() {
   const [search, setSearch] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
 
+  const [selectedInternId, setSelectedInternId] = useState(null);
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [selectedCertInternship, setSelectedCertInternship] = useState(null);
   const [certModalOpen, setCertModalOpen] = useState(false);
 
@@ -182,6 +187,23 @@ export default function AlumniPage() {
   };
 
   const tabCounts = { waiting: waitingItems.length, roster: rosterItems.length, certified: certifiedItems.length };
+
+  if (selectedInternId) {
+    return (
+      <AppLayout>
+        <AdminIntern360View
+          internId={selectedInternId}
+          initialTrackId={selectedTrackId}
+          defaultToCompleted={true}
+          onBack={() => {
+            setSelectedInternId(null);
+            setSelectedTrackId(null);
+            loadData();
+          }}
+        />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -349,17 +371,23 @@ export default function AlumniPage() {
                     const isLoading = actionLoadingId === item.id;
 
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
+                      <tr
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedInternId(item.intern_id || item.intern?.id);
+                          setSelectedTrackId(item.id);
+                        }}
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                      >
 
                         {/* Name + Avatar */}
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-2xl text-white font-black text-xs flex items-center justify-center shadow-xs flex-shrink-0 ${
-                              item.status === STATUS.COMPLETED ? "bg-emerald-600" :
-                              item.status === STATUS.PENDING_GEN ? "bg-blue-600" : "bg-amber-500"
-                            }`}>
-                              {internName.slice(0, 2).toUpperCase()}
-                            </div>
+                            <UserAvatar
+                              avatarUrl={internUser?.profile?.avatar_url}
+                              name={internName}
+                              size="md"
+                            />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <h4 className="font-extrabold text-sm text-slate-900 truncate">{internName}</h4>

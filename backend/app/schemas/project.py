@@ -17,6 +17,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     technologies: Optional[str] = None
     repo_url: Optional[str] = None
+    image_url: Optional[str] = None
     status: str = "in_progress"
 
 class ProjectCreate(ProjectBase):
@@ -27,6 +28,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     technologies: Optional[str] = None
     repo_url: Optional[str] = None
+    image_url: Optional[str] = None
     status: Optional[str] = None
 
 class ProjectResponse(ProjectBase):

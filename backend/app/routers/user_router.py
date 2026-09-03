@@ -65,6 +65,70 @@ def edit_own_profile(
 ):
     return update_profile(db, current_user.id, req)
 
+import os
+import uuid
+import shutil
+from fastapi import UploadFile, File
+from app.models.profile import Profile
+from app.config import settings
+
+@router.post("/profile/me/avatar", response_model=ProfileResponse)
+def upload_own_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return handle_avatar_upload(db, current_user.id, file)
+
+@router.post("/{user_id}/avatar", response_model=ProfileResponse)
+def upload_user_avatar(
+    user_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Only the user themselves or an Admin can upload/update the profile picture
+    is_admin = current_user.role and current_user.role.name == "admin"
+    is_self = current_user.id == user_id
+    if not (is_admin or is_self):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Profile pictures can only be edited by the user themselves or by an administrator."
+        )
+    return handle_avatar_upload(db, user_id, file)
+
+def handle_avatar_upload(db: Session, target_user_id: int, file: UploadFile) -> Profile:
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (PNG, JPG, WEBP, etc.)")
+    
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "avatars")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".png"
+    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"]:
+        ext = ".png"
+    
+    filename = f"avatar_{target_user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(upload_dir, filename)
+
+    try:
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to save image: {str(e)}")
+    
+    avatar_url = f"/uploads/avatars/{filename}"
+    profile = db.query(Profile).filter(Profile.user_id == target_user_id).first()
+    if not profile:
+        profile = Profile(user_id=target_user_id, full_name="User", avatar_url=avatar_url)
+        db.add(profile)
+    else:
+        profile.avatar_url = avatar_url
+
+    db.commit()
+    db.refresh(profile)
+    return profile
+
 @router.put("/{user_id}/role", response_model=UserResponse)
 def change_role(
     user_id: int,

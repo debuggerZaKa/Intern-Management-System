@@ -20,7 +20,8 @@ import {
   X,
   ChevronDown,
   Sparkles,
-  GraduationCap
+  GraduationCap,
+  Info
 } from "lucide-react";
 import { projectService } from "../services/projectService";
 import { taskService } from "../services/taskService";
@@ -34,6 +35,12 @@ import EmptyState from "../components/common/EmptyState";
 import ErrorMessage from "../components/common/ErrorMessage";
 import StatCard from "../components/common/StatCard";
 import TaskKanban from "../components/intern/TaskKanban";
+import ProjectCard from "../components/mentor/ProjectCard";
+import ProjectDetailsModal from "../components/common/ProjectDetailsModal";
+import UserAvatar from "../components/common/UserAvatar";
+import { getMediaUrl } from "../utils/mediaUtils";
+import { getUniqueInternCurrentTracks } from "../utils/internshipUtils";
+import { Upload } from "lucide-react";
 
 export default function ProjectsPage() {
   const { user, isIntern, isMentor, isAdmin } = useAuth();
@@ -53,6 +60,7 @@ export default function ProjectsPage() {
 
   // Selected Project for On-Page Tasks Screen
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectInfoModalOpen, setProjectInfoModalOpen] = useState(false);
 
   // Modal State for Project Create / Edit
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,6 +73,8 @@ export default function ProjectsPage() {
     status: "not_started",
     internship_id: "",
   });
+  const [projectCoverFile, setProjectCoverFile] = useState(null);
+  const [projectCoverPreview, setProjectCoverPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
 
@@ -106,31 +116,54 @@ export default function ProjectsPage() {
     loadData();
   }, []);
 
+  const handleProjectCoverChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProjectCoverFile(file);
+      setProjectCoverPreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleOpenCreate = () => {
     setEditingProject(null);
-    const defaultInternshipId = internships[0]?.id || "";
+    const defaultInternshipId = internships[0]?.id;
     setFormData({
       title: "",
       description: "",
       technologies: "React, FastAPI, PostgreSQL, Tailwind CSS",
       repo_url: "https://github.com/NETSOL/internship-project",
       status: "not_started",
-      internship_id: defaultInternshipId,
+      internship_ids: defaultInternshipId ? [defaultInternshipId] : [],
     });
+    setProjectCoverFile(null);
+    setProjectCoverPreview(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (e, proj) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setEditingProject(proj);
+    const matchingInternshipIds = Array.from(
+      new Set(
+        projects
+          .filter((p) => p.title === proj.title && p.internship_id)
+          .map((p) => p.internship_id)
+      )
+    );
+    if (!matchingInternshipIds.includes(proj.internship_id)) {
+      matchingInternshipIds.push(proj.internship_id);
+    }
+
     setFormData({
       title: proj.title,
       description: proj.description || "",
       technologies: proj.technologies || "",
       repo_url: proj.repo_url || "",
       status: proj.status || "not_started",
-      internship_id: proj.internship_id || "",
+      internship_ids: matchingInternshipIds.length > 0 ? matchingInternshipIds : [proj.internship_id],
     });
+    setProjectCoverFile(null);
+    setProjectCoverPreview(proj.image_url ? getMediaUrl(proj.image_url) : null);
     setModalOpen(true);
   };
 
@@ -140,23 +173,78 @@ export default function ProjectsPage() {
       alert("Project title is required.");
       return;
     }
+    if (!formData.internship_ids || formData.internship_ids.length === 0) {
+      alert("Please select at least one intern to assign this project to.");
+      return;
+    }
 
     try {
       setSaving(true);
+      const targetIds = formData.internship_ids;
+
       if (editingProject) {
-        await projectService.updateProject(editingProject.id, formData);
-      } else {
-        const targetInternshipId = formData.internship_id || activeInternship?.id || (internships[0]?.id);
-        if (!targetInternshipId) {
-          alert("Please select an intern track to assign this project to.");
-          return;
-        }
-        await projectService.createProject({
-          ...formData,
-          internship_id: parseInt(targetInternshipId),
+        // Update the primary project
+        await projectService.updateProject(editingProject.id, {
+          title: formData.title,
+          description: formData.description,
+          technologies: formData.technologies,
+          repo_url: formData.repo_url,
+          status: formData.status,
         });
+
+        if (projectCoverFile) {
+          try {
+            await projectService.uploadProjectImage(editingProject.id, projectCoverFile);
+          } catch (imgErr) {
+            console.warn("Cover image upload failed:", imgErr);
+          }
+        }
+
+        // For any newly selected internship tracks, create project instances if not present
+        const existingTrackIds = new Set(
+          projects.filter((p) => p.title === editingProject.title).map((p) => p.internship_id)
+        );
+        for (const trackId of targetIds) {
+          if (!existingTrackIds.has(trackId) && trackId !== editingProject.internship_id) {
+            const newP = await projectService.createProject({
+              title: formData.title,
+              description: formData.description,
+              technologies: formData.technologies,
+              repo_url: formData.repo_url,
+              status: formData.status,
+              internship_id: parseInt(trackId),
+            });
+            if (projectCoverFile && newP?.id) {
+              await projectService.uploadProjectImage(newP.id, projectCoverFile).catch(() => {});
+            }
+          }
+        }
+      } else {
+        // Create project for each selected internship track
+        for (const trackId of targetIds) {
+          const createdProj = await projectService.createProject({
+            title: formData.title,
+            description: formData.description,
+            technologies: formData.technologies,
+            repo_url: formData.repo_url,
+            status: formData.status,
+            internship_id: parseInt(trackId),
+          });
+
+          if (projectCoverFile && createdProj?.id) {
+            try {
+              await projectService.uploadProjectImage(createdProj.id, projectCoverFile);
+            } catch (imgErr) {
+              console.warn("Cover image upload failed:", imgErr);
+            }
+          }
+        }
       }
+
       setModalOpen(false);
+      setEditingProject(null);
+      setProjectCoverFile(null);
+      setProjectCoverPreview(null);
       loadData();
     } catch (err) {
       console.error("Save project failed:", err);
@@ -278,108 +366,43 @@ export default function ProjectsPage() {
           /* ON-PAGE PROJECT TASKS SCREEN */
           <div className="space-y-3.5 animate-fadeIn">
             {/* Top Navigation Back Header */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 pb-1">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSelectedProject(null)}
                   title="Back to All Projects"
-                  className="w-10 h-10 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0"
+                  className="w-10 h-10 rounded-2xl bg-white border-2 border-slate-300 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0 cursor-pointer"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                  Tasks from {selectedProject.title}
-                </h1>
-              </div>
-
-              {/* Only Mentors can edit project details */}
-              {isMentor && (
-                <button
-                  onClick={(e) => handleOpenEdit(e, selectedProject)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold transition-all shadow-xs"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>Edit Project Details</span>
-                </button>
-              )}
-
-              {/* Admin View-Only Notice */}
-              {isAdmin && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-2xl text-xs font-semibold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Admin Read-Only Monitoring View</span>
-                </span>
-              )}
-            </div>
-
-            {/* Selected Project Overview Header Banner */}
-            <div className="bg-white rounded-3xl p-6 border-[1.5px] border-slate-300 shadow-md shadow-slate-200/70 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 text-white font-black flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0">
-                    <Code2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedProject.title}</h2>
-                    {(() => {
-                      const matchedInternship = internships.find(i => i.id === selectedProject.internship_id);
-                      const internName = matchedInternship?.intern?.profile?.full_name || matchedInternship?.intern?.email || `Track #${selectedProject.internship_id}`;
-                      return (
-                        <p className="text-xs text-slate-500 font-semibold flex items-center gap-1.5 mt-0.5">
-                          <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Assigned Intern: <strong className="text-slate-800">{internName}</strong></span>
-                        </p>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Top Right: Status Badge & Actions */}
-                <div className="flex items-center gap-2.5 flex-shrink-0 self-start sm:self-auto">
-                  <StatusBadge status={selectedProject.status || "not_started"} size="sm" />
-
-                  {isIntern && selectedProject.status === "not_started" && (
-                    <button
-                      onClick={(e) => handleUpdateStatus(e, selectedProject, "in_progress")}
-                      disabled={statusUpdatingId === selectedProject.id}
-                      className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
-                    >
-                      <PlayCircle className="w-4 h-4" />
-                      <span>{statusUpdatingId === selectedProject.id ? "Starting..." : "Start Project"}</span>
-                    </button>
-                  )}
+                <div>
+                  <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                    {selectedProject.title}
+                  </h1>
                 </div>
               </div>
 
-              {selectedProject.description && (
-                <p className="text-xs text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
-                  {selectedProject.description}
-                </p>
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                {selectedProject.technologies && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedProject.technologies.split(",").map((t, idx) => (
-                      <span key={idx} className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-lg border border-slate-200/70">
-                        {t.trim()}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {selectedProject.repo_url && (
-                  <a
-                    href={selectedProject.repo_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-extrabold text-blue-600 hover:underline"
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Only Mentors / Admins can edit project details */}
+                {(isMentor || isAdmin) && (
+                  <button
+                    onClick={(e) => handleOpenEdit(e, selectedProject)}
+                    className="h-10 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5"
                   >
-                    <Github className="w-4 h-4" />
-                    <span>Code Repository</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                    <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Edit Project</span>
+                  </button>
                 )}
+
+                {/* Info Icon Button on Top Right (Same row as Back button) */}
+                <button
+                  type="button"
+                  onClick={() => setProjectInfoModalOpen(true)}
+                  title="View Project Specifications & Details"
+                  className="w-10 h-10 rounded-2xl bg-white border-2 border-slate-300 shadow-xs flex items-center justify-center text-slate-700 hover:text-blue-600 hover:border-blue-400 hover:scale-105 transition-all flex-shrink-0 cursor-pointer"
+                >
+                  <Info className="w-5 h-5 text-blue-600" />
+                </button>
               </div>
             </div>
 
@@ -388,10 +411,20 @@ export default function ProjectsPage() {
               tasks={tasks.filter((t) => t.project_id === selectedProject.id)}
               projects={[selectedProject]}
               onRefresh={loadData}
-              allowCreate={isMentor}
+              allowCreate={isMentor || isAdmin}
               isIntern={isIntern}
               isAdmin={isAdmin}
               isMentor={isMentor}
+            />
+
+            {/* Project Details Popup Modal with Members */}
+            <ProjectDetailsModal
+              isOpen={projectInfoModalOpen}
+              onClose={() => setProjectInfoModalOpen(false)}
+              project={selectedProject}
+              tasks={tasks}
+              intern={internships.find((i) => i.id === selectedProject.internship_id)?.intern}
+              mentor={internships.find((i) => i.id === selectedProject.internship_id)?.mentor}
             />
           </div>
         ) : (
@@ -540,7 +573,7 @@ export default function ProjectsPage() {
             </div>
 
             {/* ========================================================= */}
-            {/* PROJECT CARDS GRID (Preserving Card Layout)               */}
+            {/* PROJECT CARDS GRID (Using NFT-Style ProjectCard)          */}
             {/* ========================================================= */}
             {displayedProjects.length === 0 ? (
               <EmptyState
@@ -553,153 +586,26 @@ export default function ProjectsPage() {
                     ? "Your supervising mentor will assign your official engineering project track shortly."
                     : "Create and assign primary software engineering projects to your interns to organize tasks and sprints."
                 }
-                actionLabel={hasActiveFilters ? "Reset Filters" : isMentor ? "Assign First Project" : null}
-                onAction={hasActiveFilters ? resetFilters : isMentor ? handleOpenCreate : null}
+                actionLabel={hasActiveFilters ? "Reset Filters" : (isMentor || isAdmin) ? "Assign First Project" : null}
+                onAction={hasActiveFilters ? resetFilters : (isMentor || isAdmin) ? handleOpenCreate : null}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {displayedProjects.map((proj) => {
-                  const techList = proj.technologies
-                    ? proj.technologies.split(",").map((t) => t.trim()).filter(Boolean)
-                    : [];
-                  
-                  const matchedInternship = internships.find(i => i.id === proj.internship_id);
-                  const internName = matchedInternship?.intern?.profile?.full_name || matchedInternship?.intern?.email || `Track #${proj.internship_id}`;
-                  const isNotStarted = proj.status === "not_started";
-
-                  const projectTasks = tasks.filter(t => t.project_id === proj.id);
-                  const doneCount = projectTasks.filter(t => t.status === "done").length;
-                  const progressPercent = projectTasks.length > 0
-                    ? Math.round((doneCount / projectTasks.length) * 100)
-                    : 0;
+                  const matchedInternship = internships.find((i) => i.id === proj.internship_id);
 
                   return (
-                    /* Entire Card is Clickable to Open Tasks Screen */
-                    <div
+                    <ProjectCard
                       key={proj.id}
-                      onClick={() => setSelectedProject(proj)}
-                      className={`bg-white rounded-3xl p-6 border-[1.5px] shadow-md shadow-slate-200/70 flex flex-col justify-between transition-all cursor-pointer group hover:shadow-xl ${
-                        isNotStarted
-                          ? "border-amber-300/80 bg-amber-50/10 hover:border-amber-400"
-                          : "border-slate-300 hover:border-blue-500"
-                      }`}
-                    >
-                      <div className="space-y-4">
-                        {/* Header Row */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black shadow-md flex-shrink-0 transition-transform group-hover:scale-105 ${
-                              isNotStarted
-                                ? "bg-amber-500 text-white shadow-amber-500/20"
-                                : "bg-gradient-to-tr from-blue-600 to-indigo-700 text-white shadow-blue-500/20"
-                            }`}>
-                              <Code2 className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h4 className="font-extrabold text-base text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                                {proj.title}
-                              </h4>
-                              <p className="text-xs text-slate-500 font-semibold flex items-center gap-1.5 mt-0.5">
-                                <UserCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                                <span className="truncate">{internName}</span>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <StatusBadge status={proj.status || "not_started"} size="xs" />
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        {proj.description && (
-                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed font-normal">
-                            {proj.description}
-                          </p>
-                        )}
-
-                        {/* Tech Stacks Tags */}
-                        {techList.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {techList.map((tech, i) => (
-                              <span
-                                key={i}
-                                className="px-2.5 py-1 bg-slate-100/90 text-slate-700 text-[10px] font-bold rounded-lg border border-slate-200/70"
-                              >
-                                {tech}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Milestone & Tasks Progress Bar */}
-                        <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                            <span className="flex items-center gap-1.5">
-                              <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-                              <span>{doneCount} / {projectTasks.length} Tasks Completed</span>
-                            </span>
-                            <span className="text-blue-600 font-black">{progressPercent}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                            <div
-                              className="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${progressPercent}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Quick Action Button for Intern Status Transition */}
-                        {isIntern && isNotStarted && (
-                          <button
-                            onClick={(e) => handleUpdateStatus(e, proj, "in_progress")}
-                            disabled={statusUpdatingId === proj.id}
-                            className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-extrabold shadow-sm shadow-blue-500/20 transition-all flex items-center justify-center gap-2 group/btn"
-                          >
-                            <PlayCircle className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                            <span>{statusUpdatingId === proj.id ? "Starting..." : "Start Project"}</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Footer & Actions */}
-                      <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between">
-                        {proj.repo_url ? (
-                          <a
-                            href={proj.repo_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
-                          >
-                            <Github className="w-3.5 h-3.5" />
-                            <span>Code Repo</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 font-medium italic">No repo attached</span>
-                        )}
-
-                        {isMentor && (
-                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={(e) => handleOpenEdit(e, proj)}
-                              className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all"
-                              title="Edit Project Details"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button
-                              onClick={(e) => handleDeleteProject(e, proj.id)}
-                              className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 flex items-center justify-center transition-all"
-                              title="Delete Project"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      project={proj}
+                      tasks={tasks}
+                      intern={matchedInternship?.intern}
+                      mentor={matchedInternship?.mentor}
+                      isReadOnly={isIntern}
+                      onOpenProject={(p) => setSelectedProject(p)}
+                      onEditProject={(p) => handleOpenEdit(null, p)}
+                      onDeleteProject={(id) => handleDeleteProject(null, id)}
+                    />
                   );
                 })}
               </div>
@@ -707,37 +613,146 @@ export default function ProjectsPage() {
           </div>
         )}
 
-        {/* Project Create / Edit Modal (For Mentors) */}
-        {isMentor && (
+        {/* Project Create / Edit Modal (For Mentors & Admins) */}
+        {(isMentor || isAdmin) && (
           <Modal
             isOpen={modalOpen}
-            onClose={() => setModalOpen(false)}
-            title={editingProject ? "Edit Engineering Project" : "Assign Engineering Project to Intern"}
-            subtitle="Define project deliverables, tech stacks, and assign to an intern"
+            onClose={() => {
+              setModalOpen(false);
+              setEditingProject(null);
+            }}
+            title={editingProject ? `Edit Project: ${editingProject.title}` : "Assign Engineering Project to Intern"}
+            subtitle="Define project deliverables, cover image, tech stacks, and assign to an intern"
+            maxWidth="max-w-xl"
           >
-            <form onSubmit={handleSaveProject} className="space-y-4">
-              {!editingProject && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Assign to Intern / Track *
+            <form onSubmit={handleSaveProject} className="space-y-4 pt-1">
+              {/* Multi-Select Intern Assignment */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                    Assign Interns ({formData.internship_ids?.length || 0} Selected) *
                   </label>
-                  <select
-                    required
-                    value={formData.internship_id}
-                    onChange={(e) => setFormData({ ...formData, internship_id: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-semibold"
-                  >
-                    {internships.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.intern?.profile?.full_name || i.intern?.email} ({i.department} - Week {i.current_week})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          internship_ids: internships.map((i) => i.id),
+                        })
+                      }
+                      className="text-blue-600 hover:text-blue-700 font-bold cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, internship_ids: [] })}
+                      className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {/* Selected Intern Chips */}
+                {formData.internship_ids?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {formData.internship_ids.map((id) => {
+                      const matched = internships.find((i) => i.id === id);
+                      const name = matched?.intern?.profile?.full_name || matched?.intern?.email || `Track #${id}`;
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold shadow-2xs animate-fadeIn"
+                        >
+                          <UserAvatar
+                            avatarUrl={matched?.intern?.profile?.avatar_url}
+                            name={name}
+                            size="xs"
+                          />
+                          <span className="truncate max-w-[120px]">{name}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                internship_ids: formData.internship_ids.filter((tid) => tid !== id),
+                              })
+                            }
+                            className="p-0.5 hover:bg-blue-200 rounded-full text-blue-600 transition-colors cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Candidate Selection List */}
+                <div className="max-h-44 overflow-y-auto border-2 border-slate-200 rounded-2xl p-2 bg-slate-50 divide-y divide-slate-100 space-y-1">
+                  {getUniqueInternCurrentTracks(internships).map((i) => {
+                    const isSelected = formData.internship_ids?.includes(i.id);
+                    const iName = i.intern?.profile?.full_name || i.intern?.email || "Intern";
+
+                    return (
+                      <label
+                        key={i.id}
+                        className={`flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-100/70 border border-blue-300"
+                            : "bg-white hover:bg-slate-100/80 border border-slate-200/60"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  internship_ids: [...(formData.internship_ids || []), i.id],
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  internship_ids: (formData.internship_ids || []).filter((id) => id !== i.id),
+                                });
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <UserAvatar
+                            avatarUrl={i.intern?.profile?.avatar_url}
+                            name={iName}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              {iName}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium truncate">
+                              {i.department} &bull; Week {i.current_week} of {i.duration_weeks}W
+                            </p>
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">
+                            Assigned
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Project Title *
                 </label>
                 <input
@@ -746,12 +761,79 @@ export default function ProjectsPage() {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="e.g. NETSOL Cloud Lease Optimization Engine"
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-bold"
                 />
               </div>
 
+              {/* Project Cover Image Section */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                  Project Cover Image
+                </label>
+                <div className="space-y-2">
+                  {projectCoverPreview ? (
+                    <div className="relative w-full h-36 rounded-2xl overflow-hidden border border-slate-200 group bg-slate-900">
+                      <img
+                        src={projectCoverPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all">
+                        <label className="px-3 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-bold cursor-pointer hover:bg-slate-100 shadow-md">
+                          Change Image
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProjectCoverChange}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProjectCoverFile(null);
+                            setProjectCoverPreview(null);
+                          }}
+                          className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="w-full py-4 px-3 border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-2xl flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-blue-50/30 transition-all text-xs text-slate-500">
+                      <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                      <span className="font-bold">Upload project cover image (PNG, JPG, WEBP)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProjectCoverChange}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {editingProject && (
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
+                    Project Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Project Scope & Deliverables
                 </label>
                 <textarea
@@ -759,12 +841,12 @@ export default function ProjectsPage() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Key goals, architectural components, deliverables, and engineering scope..."
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Technologies & Tools (Comma Separated)
                 </label>
                 <input
@@ -772,12 +854,12 @@ export default function ProjectsPage() {
                   value={formData.technologies}
                   onChange={(e) => setFormData({ ...formData, technologies: e.target.value })}
                   placeholder="React, FastAPI, PostgreSQL, Docker, Redis"
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Code Repository URL
                 </label>
                 <input
@@ -785,29 +867,17 @@ export default function ProjectsPage() {
                   value={formData.repo_url}
                   onChange={(e) => setFormData({ ...formData, repo_url: e.target.value })}
                   placeholder="https://github.com/NETSOL/project-repo"
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-medium"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Initial Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 font-semibold"
-                >
-                  <option value="not_started">Not Started (Intern will click Start)</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  onClick={() => {
+                    setModalOpen(false);
+                    setEditingProject(null);
+                  }}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
                 >
                   Cancel
@@ -815,7 +885,7 @@ export default function ProjectsPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-500/20 transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition-all hover:scale-105 disabled:opacity-50"
                 >
                   {saving ? "Saving..." : editingProject ? "Update Project" : "Assign Project"}
                 </button>
